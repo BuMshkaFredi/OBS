@@ -1,0 +1,43 @@
+# --- ОС ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.Spotlight-V100
+.Trashes
+
+# --- Редакторы / IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Секреты и локальные настройки ---
+.env
+.env.*
+*.local
+
+# --- Логи и временные файлы ---
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# --- Сборка / зависимости ---
+node_modules/
+dist/
+build/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- OBS Studio ---
+# Логи и дампы крашей OBS
+crash-reports/
+*.dmp
+# Резервные копии сцен и профилей
+*.bak
+*-backup/
