@@ -12,6 +12,7 @@ public sealed class VoiceCommandPipeline
     private readonly IConfirmationService confirmationService;
     private readonly Action<string>? diagnostic;
     private readonly Action<string>? notify;
+    private readonly Action<string>? compactNotify;
 
     public VoiceCommandPipeline(
         ISpeechRecognizer recognizer,
@@ -19,7 +20,8 @@ public sealed class VoiceCommandPipeline
         CommandDispatcher dispatcher,
         IConfirmationService? confirmationService = null,
         Action<string>? diagnostic = null,
-        Action<string>? notify = null)
+        Action<string>? notify = null,
+        Action<string>? compactNotify = null)
     {
         this.recognizer = recognizer;
         this.parser = parser;
@@ -27,6 +29,9 @@ public sealed class VoiceCommandPipeline
         this.confirmationService = confirmationService ?? new DecliningConfirmationService();
         this.diagnostic = diagnostic;
         this.notify = notify;
+        // Короткие сообщения о потере команды показываются компактной панелью,
+        // если она подключена; иначе используется обычное уведомление трея.
+        this.compactNotify = compactNotify ?? notify;
     }
 
     private sealed class DecliningConfirmationService : IConfirmationService
@@ -54,7 +59,7 @@ public sealed class VoiceCommandPipeline
         {
             // Речь была, но движок не дал текста: это потеря команды, а не тишина.
             diagnostic?.Invoke("Речь была, но текст не распознан");
-            notify?.Invoke("Не расслышал команду");
+            compactNotify?.Invoke("Не расслышал команду");
             return;
         }
 
@@ -63,9 +68,10 @@ public sealed class VoiceCommandPipeline
         if (command is null)
         {
             // Текст без команды — главный источник «сказал, а ничего не произошло».
-            // В лог пишем готовую строку для словаря, чтобы не гадать, что добавлять.
+            // В лог пишем саму фразу и ближайшую словарную, но не готовую строку
+            // new(...): решение о расширении словаря принимает человек.
             diagnostic?.Invoke(DescribeMiss(parseResult.NormalizedText, text));
-            notify?.Invoke("Команда не распознана");
+            compactNotify?.Invoke("Команда не распознана");
             return;
         }
 
@@ -130,12 +136,10 @@ public sealed class VoiceCommandPipeline
         }
 
         var closest = CommandVocabulary.Normalize(suggestion.Phrase.Phrase);
-        var line = suggestion.Phrase.Target is null
-            ? $"new(\"{normalizedText}\", CommandIntent.{suggestion.Phrase.Intent}),"
-            : $"new(\"{normalizedText}\", CommandIntent.{suggestion.Phrase.Intent}, \"{suggestion.Phrase.Target}\"),";
 
-        return $"{message} (ближайшая фраза: «{closest}» → {suggestion.Phrase.Intent}). " +
-               $"Добавить в CommandVocabulary.Phrases: {line}";
+        // Это только диагностическая подсказка. Готовую строку new(...) не печатаем:
+        // короткие и неоднозначные слова должен решать человек, а не лог.
+        return $"{message} (ближайшая фраза: «{closest}» → {suggestion.Phrase.Intent})";
     }
 
     private static string Describe(IReadOnlyList<TokenCorrection> corrections) =>
@@ -144,6 +148,7 @@ public sealed class VoiceCommandPipeline
     private static string? DescribeSuccess(ParsedCommand command) => command.Intent switch
     {
         CommandIntent.StartRecording => "Запись началась",
+        CommandIntent.MuteAllAudio => "Весь звук выключен",
         _ => null
     };
 
@@ -158,6 +163,7 @@ public sealed class VoiceCommandPipeline
         CommandIntent.MuteInput => $"выключить {CommandTargets.Accusative(command.Target)}",
         CommandIntent.UnmuteInput => $"включить {CommandTargets.Accusative(command.Target)}",
         CommandIntent.ToggleInput => $"переключить {CommandTargets.Accusative(command.Target)}",
+        CommandIntent.MuteAllAudio => "выключить весь звук",
         CommandIntent.SetStreamTitle => "изменить название",
         CommandIntent.SetStreamCategory => "изменить категорию",
         _ => command.Intent.ToString()

@@ -118,13 +118,62 @@ public sealed class ObsCommandAdapterTests
         Assert.Contains("не настроен", exception.Message);
     }
 
+    [Fact]
+    public async Task MuteAllAudio_ReportsMutedSourceCount()
+    {
+        var client = new FakeObsClient { MuteAllResult = new ObsMuteAllResult(3, Array.Empty<string>()) };
+        var adapter = new ObsCommandAdapter(client, new ConfiguredObsInputResolver(new ObsAudioInputs()));
+
+        var message = await adapter.ExecuteAsync(new ParsedCommand(CommandIntent.MuteAllAudio));
+
+        Assert.Equal("Весь звук выключен (источников: 3)", message);
+    }
+
+    [Fact]
+    public async Task MuteAllAudio_ReportsInputsThatCouldNotBeMuted()
+    {
+        var client = new FakeObsClient
+        {
+            MuteAllResult = new ObsMuteAllResult(2, new[] { "Браузер", "Музыка" })
+        };
+        var adapter = new ObsCommandAdapter(client, new ConfiguredObsInputResolver(new ObsAudioInputs()));
+
+        var message = await adapter.ExecuteAsync(new ParsedCommand(CommandIntent.MuteAllAudio));
+
+        Assert.Equal("Звук выключен не полностью. Не удалось: Браузер, Музыка", message);
+    }
+
+    [Fact]
+    public async Task MuteAllAudio_WhenObsHasNoAudioInputs_ReportsIt()
+    {
+        var client = new FakeObsClient { MuteAllResult = new ObsMuteAllResult(0, Array.Empty<string>()) };
+        var adapter = new ObsCommandAdapter(client, new ConfiguredObsInputResolver(new ObsAudioInputs()));
+
+        var message = await adapter.ExecuteAsync(new ParsedCommand(CommandIntent.MuteAllAudio));
+
+        Assert.Equal("В OBS нет источников со звуком", message);
+    }
+
+    [Fact]
+    public async Task MuteAllAudio_WhenObsIsDisconnected_Throws()
+    {
+        var client = new FakeObsClient { IsConnected = false };
+        var adapter = new ObsCommandAdapter(client, new ConfiguredObsInputResolver(new ObsAudioInputs()));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            adapter.ExecuteAsync(new ParsedCommand(CommandIntent.MuteAllAudio)));
+
+        Assert.Contains("не подключена", exception.Message);
+    }
+
     private sealed class FakeObsClient : IObsClient
     {
-        public bool IsConnected => true;
+        public bool IsConnected { get; set; } = true;
         public bool IsReplayBufferActive => false;
         public bool Muted { get; set; }
         public (string Name, bool Muted)? LastMute { get; private set; }
         public string? LastToggle { get; private set; }
+        public ObsMuteAllResult MuteAllResult { get; set; } = new(0, Array.Empty<string>());
         public Task ConnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task DisconnectAsync() => Task.CompletedTask;
         public Task StartRecordingAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -146,6 +195,9 @@ public sealed class ObsCommandAdapterTests
             Muted = !Muted;
             return Task.FromResult<bool?>(Muted);
         }
+
+        public Task<ObsMuteAllResult> MuteAllAudioAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(MuteAllResult);
 
         public Task<IReadOnlyList<string>> GetInputNamesAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());

@@ -9,6 +9,7 @@ public sealed class TrayIconService : ITrayStatus, IDisposable
     private const string Title = "OBS Voice Assistant";
 
     private readonly Forms.NotifyIcon icon;
+    private readonly Icon appIcon;
     private readonly Forms.ToolStripMenuItem statusItem;
     private readonly Action configureAction;
     private readonly Action exitAction;
@@ -24,13 +25,28 @@ public sealed class TrayIconService : ITrayStatus, IDisposable
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Выход", null, (_, _) => this.exitAction());
 
+        appIcon = LoadAppIcon();
         icon = new Forms.NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = appIcon,
             Text = Title,
             Visible = true,
             ContextMenuStrip = menu
         };
+    }
+
+    private static Icon LoadAppIcon()
+    {
+        var resource = System.Windows.Application.GetResourceStream(
+            new Uri("pack://application:,,,/Assets/app.ico", UriKind.Absolute));
+        if (resource is null)
+        {
+            return (Icon)SystemIcons.Application.Clone();
+        }
+
+        using var stream = resource.Stream;
+        using var source = new Icon(stream);
+        return (Icon)source.Clone();
     }
 
     public void SetStatus(string status) => OnUi(() =>
@@ -38,13 +54,6 @@ public sealed class TrayIconService : ITrayStatus, IDisposable
         statusItem.Text = $"OBS: {status}";
         icon.Text = $"{Title} — {status}";
     });
-
-    /// <summary>
-    /// Показывает всплывающее уведомление трея. Нужен для случаев, когда команда
-    /// распознана, но не выполнена: иначе пользователь повторяет фразу вслепую.
-    /// </summary>
-    public void Notify(string message) =>
-        OnUi(() => icon.ShowBalloonTip(5000, Title, message, Forms.ToolTipIcon.Warning));
 
     /// <summary>Запись в трей приходит из фоновых потоков, а WinForms требует UI-поток.</summary>
     private void OnUi(Action action)
@@ -63,5 +72,6 @@ public sealed class TrayIconService : ITrayStatus, IDisposable
     {
         icon.Visible = false;
         icon.Dispose();
+        appIcon.Dispose();
     }
 }

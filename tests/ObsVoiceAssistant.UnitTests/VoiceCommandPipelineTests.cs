@@ -143,6 +143,45 @@ public sealed class VoiceCommandPipelineTests
     }
 
     [Fact]
+    public async Task UnrecognizedText_PrefersCompactNotification()
+    {
+        // Короткие сообщения о потере команды не должны занимать крупный баллон трея.
+        var compact = new List<string>();
+        var regular = new List<string>();
+        var pipeline = new VoiceCommandPipeline(
+            new FakeRecognizer("привет как дела"),
+            new CommandParser(),
+            new CommandDispatcher(new RecordingPort(), new NullTwitchCommandPort(), new ConfirmationPolicy()),
+            new FakeConfirmationService(true),
+            notify: regular.Add,
+            compactNotify: compact.Add);
+
+        await pipeline.ProcessAsync(CreateRecording());
+
+        Assert.Contains(compact, message => message == "Команда не распознана");
+        Assert.Empty(regular);
+    }
+
+    [Fact]
+    public async Task EmptyRecognition_PrefersCompactNotification()
+    {
+        var compact = new List<string>();
+        var regular = new List<string>();
+        var pipeline = new VoiceCommandPipeline(
+            new FakeRecognizer(string.Empty),
+            new CommandParser(),
+            new CommandDispatcher(new RecordingPort(), new NullTwitchCommandPort(), new ConfirmationPolicy()),
+            new FakeConfirmationService(true),
+            notify: regular.Add,
+            compactNotify: compact.Add);
+
+        await pipeline.ProcessAsync(CreateRecording());
+
+        Assert.Contains(compact, message => message == "Не расслышал команду");
+        Assert.Empty(regular);
+    }
+
+    [Fact]
     public async Task StartRecording_NotifiesUserAfterSuccess()
     {
         // Запись запускается без подтверждения, поэтому итог должен быть виден.
@@ -186,9 +225,10 @@ public sealed class VoiceCommandPipelineTests
     }
 
     [Fact]
-    public async Task UnrecognizedText_LogsReadyToPasteVocabularyLine()
+    public async Task UnrecognizedText_LogsClosestPhraseWithoutVocabularySuggestion()
     {
-        // Лог должен не просто сообщать о потере команды, а давать готовую строку для словаря.
+        // Лог подсказывает ближайшую фразу, но не печатает готовую строку new(...):
+        // расширение словаря остаётся решением человека.
         var messages = new List<string>();
         var pipeline = new VoiceCommandPipeline(
             new FakeRecognizer("включи браузер же"),
@@ -202,10 +242,28 @@ public sealed class VoiceCommandPipelineTests
         var miss = messages.Find(message => message.Contains("Команда не распознана", StringComparison.Ordinal));
         Assert.NotNull(miss);
         Assert.Contains("ближайшая фраза", miss, StringComparison.Ordinal);
-        Assert.Contains(
-            "new(\"включи браузер же\", CommandIntent.UnmuteInput, \"browser\")",
-            miss,
-            StringComparison.Ordinal);
+        Assert.DoesNotContain("Добавить в CommandVocabulary", miss, StringComparison.Ordinal);
+        Assert.DoesNotContain("new(", miss, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UnrecognizedNegation_DoesNotSuggestMicrophoneToggle()
+    {
+        // «Не» — не команда и не повод предлагать new("не", ToggleInput, "microphone").
+        var messages = new List<string>();
+        var pipeline = new VoiceCommandPipeline(
+            new FakeRecognizer("не"),
+            new CommandParser(),
+            new CommandDispatcher(new RecordingPort(), new NullTwitchCommandPort(), new ConfirmationPolicy()),
+            new FakeConfirmationService(true),
+            diagnostic: messages.Add);
+
+        await pipeline.ProcessAsync(CreateRecording());
+
+        var miss = messages.Find(message => message.Contains("Команда не распознана", StringComparison.Ordinal));
+        Assert.NotNull(miss);
+        Assert.DoesNotContain("ближайшая фраза", miss, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToggleInput", miss, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -261,6 +319,26 @@ public sealed class VoiceCommandPipelineTests
         await pipeline.ProcessAsync(CreateRecording());
 
         Assert.Contains(notified, message => message == "Микрофон выключен");
+    }
+
+    [Fact]
+    public async Task MuteAllAudio_ReportsResultToUser()
+    {
+        // «Ол мут» — массовое действие, поэтому итог должен быть виден.
+        var notified = new List<string>();
+        var pipeline = new VoiceCommandPipeline(
+            new FakeRecognizer("ол мут"),
+            new CommandParser(),
+            new CommandDispatcher(
+                new OutcomePort("Весь звук выключен (источников: 5)"),
+                new NullTwitchCommandPort(),
+                new ConfirmationPolicy()),
+            new FakeConfirmationService(true),
+            notify: notified.Add);
+
+        await pipeline.ProcessAsync(CreateRecording());
+
+        Assert.Contains(notified, message => message == "Весь звук выключен (источников: 5)");
     }
 
     private sealed class FailingPort(string message) : IObsCommandPort

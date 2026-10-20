@@ -7,7 +7,6 @@ public sealed class NAudioMicrophoneRecorder : IAudioRecorder, IDisposable
 {
     private readonly object sync = new();
     private readonly WaveFormat format;
-    private readonly Action<int>? dataReceived;
     private readonly Action<Exception>? recordingError;
     private WaveInEvent? waveIn;
     private MemoryStream? buffer;
@@ -17,11 +16,9 @@ public sealed class NAudioMicrophoneRecorder : IAudioRecorder, IDisposable
     public NAudioMicrophoneRecorder(
         int sampleRate = 16_000,
         int channels = 1,
-        Action<int>? dataReceived = null,
         Action<Exception>? recordingError = null)
     {
         format = new WaveFormat(sampleRate, 16, channels);
-        this.dataReceived = dataReceived;
         this.recordingError = recordingError;
     }
 
@@ -104,8 +101,6 @@ public sealed class NAudioMicrophoneRecorder : IAudioRecorder, IDisposable
         {
             writer?.Write(e.Buffer, 0, e.BytesRecorded);
         }
-
-        dataReceived?.Invoke(e.BytesRecorded);
     }
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs e)

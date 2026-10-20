@@ -8,6 +8,7 @@ using ObsVoiceAssistant.Configuration;
 using ObsVoiceAssistant.Diagnostics;
 using ObsVoiceAssistant.Integrations.Obs;
 using ObsVoiceAssistant.Notifications;
+using ObsVoiceAssistant.Recordings;
 using ObsVoiceAssistant.Speech;
 using ObsVoiceAssistant.Tray;
 
@@ -17,6 +18,7 @@ public partial class App : System.Windows.Application
 {
     private SettingsService? settingsService;
     private TrayIconService? trayIcon;
+    private NotificationPanelService? notifications;
     private ObsWebSocketClient? obsClient;
     private ApplicationOrchestrator? orchestrator;
     private NAudioMicrophoneRecorder? microphoneRecorder;
@@ -24,6 +26,7 @@ public partial class App : System.Windows.Application
     private CommandDispatcher? commandDispatcher;
     private VoiceCommandPipeline? voiceCommandPipeline;
     private ISpeechRecognizer? speechRecognizer;
+    private RecordingNamingService? recordingNaming;
     private bool? lastObsConnectionState;
     private readonly AssistantLogger logger = new();
 
@@ -33,6 +36,7 @@ public partial class App : System.Windows.Application
 
         settingsService = new SettingsService();
         trayIcon = new TrayIconService(ShowObsSettings, Shutdown);
+        notifications = new NotificationPanelService();
         speechRecognizer = CreateSpeechRecognizer();
         StartObsConnection();
         logger.Info($"Доступно устройств записи: {WaveInEvent.DeviceCount}");
@@ -50,7 +54,6 @@ public partial class App : System.Windows.Application
         }
 
         microphoneRecorder = new NAudioMicrophoneRecorder(
-            dataReceived: bytes => logger.Info($"Получено аудио: {bytes} байт"),
             recordingError: exception => logger.Error("Ошибка записи микрофона", exception));
         continuousListening = new ContinuousListeningService(
             microphoneRecorder,
@@ -75,6 +78,8 @@ public partial class App : System.Windows.Application
         continuousListening?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         microphoneRecorder?.Dispose();
         (speechRecognizer as IDisposable)?.Dispose();
+        recordingNaming?.Dispose();
+        notifications?.Dispose();
         obsClient?.Dispose();
         trayIcon?.Dispose();
         base.OnExit(e);
@@ -154,6 +159,7 @@ public partial class App : System.Windows.Application
     private void RestartObsConnection()
     {
         orchestrator?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        recordingNaming?.Dispose();
         obsClient?.Dispose();
         StartObsConnection();
     }
@@ -186,6 +192,11 @@ public partial class App : System.Windows.Application
         var password = settingsService.LoadObsPassword();
         var obsOptions = new ObsConnectionOptions(settings.ObsUrl, password);
         obsClient = new ObsWebSocketClient(obsOptions);
+        recordingNaming = new RecordingNamingService(
+            new WpfRecordingNamePrompt(),
+            message => notifications?.Show(message),
+            message => logger.Info(message));
+        recordingNaming.Attach(obsClient);
         var obsConnection = new ObsConnectionService(obsClient);
         obsConnection.ConnectionStateChanged += connected =>
         {
@@ -213,7 +224,8 @@ public partial class App : System.Windows.Application
                 commandDispatcher,
                 new WindowsToastConfirmationService(),
                 diagnostic: message => logger.Info(message),
-                notify: message => trayIcon?.Notify(message));
+                notify: message => notifications?.Show(message),
+                compactNotify: message => notifications?.ShowCompact(message));
         }
 
         orchestrator = new ApplicationOrchestrator(obsConnection, trayIcon);

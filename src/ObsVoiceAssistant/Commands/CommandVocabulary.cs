@@ -49,32 +49,58 @@ public static class CommandVocabulary
     };
 
     /// <summary>
+    /// Цель звуковой команды. <see cref="ScopeForms"/> — уточнения источника
+    /// («стрима», «на стриме»). Если они заданы, форма без уточнения не генерируется:
+    /// «выключи музыку» должно остаться личной музыкой, а не музыкой стрима.
+    /// </summary>
+    private sealed record AudioTarget(
+        string Key,
+        string Name,
+        bool Reverse,
+        CommandIntent OffIntent,
+        CommandIntent OnIntent,
+        IReadOnlyList<string>? ScopeForms = null);
+
+    /// <summary>
+    /// Формы слова «стрим» в музыке стрима, включая предлог «на». Перечислены явно,
+    /// потому что «стрим» уже каноническое слово трансляции и исправляться не должно.
+    /// Vosk слышит «стрима», «стрим», «стримов», «на стриме», «на стрима» и «на стремя»;
+    /// с предлогом «на» фраза иначе не совпадает целиком.
+    /// </summary>
+    private static readonly string[] StreamScopeForms =
+    {
+        "стрима",
+        "стрим",
+        "стримов",
+        "стремя",
+        "на стриме",
+        "на стрим",
+        "на стрима",
+        "на стремя",
+        "на стримов"
+    };
+
+    /// <summary>
     /// Цели звуковых команд: код настройки, слово в речи и то, что означают для неё
     /// глаголы «выключить» и «включить». Микрофон и личная музыка переключаются
     /// любой из формулировок, браузер и музыка стрима понимают их буквально.
     /// Слово дано в винительном падеже: «выключи музыку», «музыку выключи».
     /// </summary>
-    private static readonly (string Target, string Name, bool Reverse, CommandIntent Off, CommandIntent On)[] AudioTargets =
+    private static readonly AudioTarget[] AudioTargets =
     {
-        ("microphone", "микрофон", true, CommandIntent.ToggleInput, CommandIntent.ToggleInput),
-        ("microphone", "микро", false, CommandIntent.ToggleInput, CommandIntent.ToggleInput),
-        ("browser", "браузер", true, CommandIntent.MuteInput, CommandIntent.UnmuteInput),
+        new("microphone", "микрофон", true, CommandIntent.ToggleInput, CommandIntent.ToggleInput),
+        new("microphone", "микро", false, CommandIntent.ToggleInput, CommandIntent.ToggleInput),
+        new("browser", "браузер", true, CommandIntent.MuteInput, CommandIntent.UnmuteInput),
 
         // Личная музыка: «выключи музыку» — такое же переключение, как у микрофона.
-        ("personal_music", "музыку", true, CommandIntent.ToggleInput, CommandIntent.ToggleInput),
-        ("personal_music", "мою музыку", true, CommandIntent.ToggleInput, CommandIntent.ToggleInput),
-        ("personal_music", "личную музыку", true, CommandIntent.ToggleInput, CommandIntent.ToggleInput),
+        new("personal_music", "музыку", true, CommandIntent.ToggleInput, CommandIntent.ToggleInput),
+        new("personal_music", "мою музыку", true, CommandIntent.ToggleInput, CommandIntent.ToggleInput),
+        new("personal_music", "личную музыку", true, CommandIntent.ToggleInput, CommandIntent.ToggleInput),
 
         // Музыка стрима: только явные mute/unmute. Слово «стрим» обязательно,
         // иначе «выключи стрим» осталось бы остановкой трансляции.
-        ("stream_music", "музыку стрима", true, CommandIntent.MuteInput, CommandIntent.UnmuteInput),
-        ("stream_music", "звук стрима", true, CommandIntent.MuteInput, CommandIntent.UnmuteInput),
-
-        // Vosk часто теряет окончание и говорит «стрим». Слово «стрим» уже
-        // каноническое (трансляция), поэтому исправление его не тронет — формы
-        // с «стрим» нужны явно, иначе команда теряется.
-        ("stream_music", "музыку стрим", true, CommandIntent.MuteInput, CommandIntent.UnmuteInput),
-        ("stream_music", "звук стрим", true, CommandIntent.MuteInput, CommandIntent.UnmuteInput)
+        new("stream_music", "музыку", true, CommandIntent.MuteInput, CommandIntent.UnmuteInput, StreamScopeForms),
+        new("stream_music", "звук", true, CommandIntent.MuteInput, CommandIntent.UnmuteInput, StreamScopeForms)
     };
 
     /// <summary>Глаголы «выключить». Работают с любой целью из <see cref="AudioTargets"/>.</summary>
@@ -87,7 +113,7 @@ public static class CommandVocabulary
     /// <summary>Глаголы «включить».</summary>
     private static readonly string[] OnVerbs =
     {
-        "включи", "включить", "включай", "верни", "вернуть", "размуть",
+        "включи", "включить", "включай", "верни", "вернуть", "размут", "размуть",
         "размьють", "вруби", "врубай", "подключи", "подключить"
     };
 
@@ -291,6 +317,18 @@ public static class CommandVocabulary
         new("сними мут", CommandIntent.ToggleInput, "microphone"),
         new("убрать мут", CommandIntent.ToggleInput, "microphone"),
 
+        // Короткая форма: одно слово «мут» переключает микрофон. Формы с
+        // родительным падежом и фактическими вариантами Vosk добавлены точечно:
+        // общее правило не исправляет слова из трёх букв, чтобы не переключать
+        // микрофон на случайное короткое слово.
+        new("мут", CommandIntent.ToggleInput, "microphone"),
+        new("муть", CommandIntent.ToggleInput, "microphone"),
+        new("мьют", CommandIntent.ToggleInput, "microphone"),
+        new("муд", CommandIntent.ToggleInput, "microphone"),
+        new("мод", CommandIntent.ToggleInput, "microphone"),
+        new("мут микрофона", CommandIntent.ToggleInput, "microphone"),
+        new("мог микрофона", CommandIntent.ToggleInput, "microphone"),
+
         new("выключи звук браузера", CommandIntent.MuteInput, "browser"),
         new("выключить звук браузера", CommandIntent.MuteInput, "browser"),
         new("отключи звук браузера", CommandIntent.MuteInput, "browser"),
@@ -301,7 +339,31 @@ public static class CommandVocabulary
         new("включить звук браузера", CommandIntent.UnmuteInput, "browser"),
         new("снять мут с браузера", CommandIntent.UnmuteInput, "browser"),
         new("сними мут с браузера", CommandIntent.UnmuteInput, "browser"),
-        new("убрать мут с браузера", CommandIntent.UnmuteInput, "browser")
+        new("убрать мут с браузера", CommandIntent.UnmuteInput, "browser"),
+
+        // Весь звук: выключаются все аудиоисточники OBS. Видеоисточники
+        // без звука пропускаются адаптером.
+        new("ол мут", CommandIntent.MuteAllAudio),
+        new("олл мут", CommandIntent.MuteAllAudio),
+        new("ол муть", CommandIntent.MuteAllAudio),
+        new("олл муть", CommandIntent.MuteAllAudio),
+        new("олмут", CommandIntent.MuteAllAudio),
+        new("оллмут", CommandIntent.MuteAllAudio),
+        new("олмуть", CommandIntent.MuteAllAudio),
+        new("оллмуть", CommandIntent.MuteAllAudio),
+        new("ол мьют", CommandIntent.MuteAllAudio),
+        new("олл мьют", CommandIntent.MuteAllAudio),
+        new("олмьют", CommandIntent.MuteAllAudio),
+        new("оллмьют", CommandIntent.MuteAllAudio),
+        new("all mute", CommandIntent.MuteAllAudio),
+        new("allmute", CommandIntent.MuteAllAudio),
+        new("выключи весь звук", CommandIntent.MuteAllAudio),
+        new("выключить весь звук", CommandIntent.MuteAllAudio),
+        new("выключи все звуки", CommandIntent.MuteAllAudio),
+        new("заглуши все", CommandIntent.MuteAllAudio),
+        new("заглушить все", CommandIntent.MuteAllAudio),
+        new("мут все", CommandIntent.MuteAllAudio),
+        new("все мут", CommandIntent.MuteAllAudio)
     };
 
     /// <summary>
@@ -340,17 +402,39 @@ public static class CommandVocabulary
     /// </summary>
     private static IEnumerable<CommandPhrase> BuildInputPhrases()
     {
-        foreach (var (target, name, reverse, offIntent, onIntent) in AudioTargets)
+        foreach (var target in AudioTargets)
         {
-            foreach (var phrase in BuildVerbPhrases(target, name, reverse, OffVerbs, offIntent))
+            foreach (var name in BuildTargetNames(target))
             {
-                yield return phrase;
-            }
+                foreach (var phrase in BuildVerbPhrases(target.Key, name, target.Reverse, OffVerbs, target.OffIntent))
+                {
+                    yield return phrase;
+                }
 
-            foreach (var phrase in BuildVerbPhrases(target, name, reverse, OnVerbs, onIntent))
-            {
-                yield return phrase;
+                foreach (var phrase in BuildVerbPhrases(target.Key, name, target.Reverse, OnVerbs, target.OnIntent))
+                {
+                    yield return phrase;
+                }
             }
+        }
+    }
+
+    /// <summary>
+    /// Слова, с которыми работает цель: либо само слово, либо все его уточнения.
+    /// Так «музыка стрима» и «музыка на стриме» остаются одним источником и не
+    /// дублируют глаголы вручную.
+    /// </summary>
+    private static IEnumerable<string> BuildTargetNames(AudioTarget target)
+    {
+        if (target.ScopeForms is null || target.ScopeForms.Count == 0)
+        {
+            yield return target.Name;
+            yield break;
+        }
+
+        foreach (var scope in target.ScopeForms)
+        {
+            yield return $"{target.Name} {scope}";
         }
     }
 
@@ -371,6 +455,14 @@ public static class CommandVocabulary
             }
         }
     }
+
+    /// <summary>
+    /// Противоположные глаголы: «включи» и «выключи». Фаззи-сопоставление
+    /// не должно переворачивать команду из-за ошибки распознавания.
+    /// </summary>
+    public static bool AreOppositeVerbs(string left, string right) =>
+        (OnVerbs.Contains(left) && OffVerbs.Contains(right)) ||
+        (OffVerbs.Contains(left) && OnVerbs.Contains(right));
 
     /// <summary>Есть ли во фразе отрицание: такие фразы не разбираются.</summary>
     public static bool ContainsNegation(string normalizedText) =>

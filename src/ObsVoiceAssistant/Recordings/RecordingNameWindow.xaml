@@ -1,0 +1,48 @@
+<Window x:Class="ObsVoiceAssistant.Recordings.RecordingNameWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Название файла"
+        Icon="pack://application:,,,/Assets/app.ico"
+        Width="480"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="False"
+        Topmost="True">
+    <StackPanel Margin="16">
+        <TextBlock x:Name="HeaderText" FontSize="14" FontWeight="Bold" />
+        <TextBlock x:Name="FileText"
+                   Foreground="Gray"
+                   TextWrapping="Wrap"
+                   Margin="0,4,0,0" />
+
+        <TextBlock Text="Название добавится перед именем файла OBS. Пустое поле оставит имя как есть."
+                   Foreground="Gray"
+                   TextWrapping="Wrap"
+                   Margin="0,12,0,0" />
+        <TextBox x:Name="NameBox" Height="26" Margin="0,8,0,0" />
+        <TextBlock Text="Например: Мой клип_2026-10-20 18-16-32.mkv"
+                   Foreground="Gray"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   Margin="0,6,0,0" />
+        <TextBlock Text="Enter — добавить, Esc — оставить как есть."
+                   Foreground="Gray"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   Margin="0,4,0,0" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button x:Name="AddButton"
+                    Content="Добавить"
+                    Width="110"
+                    IsDefault="True"
+                    Margin="0,0,8,0"
+                    Click="Add_Click" />
+            <Button Content="Оставить как есть"
+                    Width="140"
+                    IsCancel="True"
+                    Click="Skip_Click" />
+        </StackPanel>
+    </StackPanel>
+</Window>

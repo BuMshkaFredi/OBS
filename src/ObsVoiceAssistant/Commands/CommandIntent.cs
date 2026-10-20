@@ -11,6 +11,7 @@ public enum CommandIntent
     MuteInput,
     UnmuteInput,
     ToggleInput,
+    MuteAllAudio,
     SetStreamTitle,
     SetStreamCategory
 }

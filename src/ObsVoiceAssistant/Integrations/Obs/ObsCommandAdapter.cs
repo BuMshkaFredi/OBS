@@ -21,6 +21,12 @@ public interface IObsClient
     /// <c>null</c> — переключение выполнено, но прочитать состояние не удалось.
     /// </summary>
     Task<bool?> ToggleInputMuteAsync(string inputName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Выключает звук у всех источников OBS, которые поддерживают аудио.
+    /// Видеоисточники без звука пропускаются.
+    /// </summary>
+    Task<ObsMuteAllResult> MuteAllAudioAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> GetInputNamesAsync(CancellationToken cancellationToken = default);
 }
 
@@ -52,6 +58,7 @@ public sealed class ObsCommandAdapter : IObsCommandPort
             CommandIntent.MuteInput => Run(SetMuteAsync(command, true, cancellationToken)),
             CommandIntent.UnmuteInput => Run(SetMuteAsync(command, false, cancellationToken)),
             CommandIntent.ToggleInput => ToggleMuteAsync(command, cancellationToken),
+            CommandIntent.MuteAllAudio => MuteAllAudioAsync(cancellationToken),
             _ => throw new InvalidOperationException($"Intent {command.Intent} is not an OBS command.")
         };
 
@@ -92,6 +99,30 @@ public sealed class ObsCommandAdapter : IObsCommandPort
             false => messages.On,
             null => messages.Toggled
         };
+    }
+
+    /// <summary>
+    /// Выключает звук у всех аудиоисточников OBS и сообщает итог. Счётчик
+    /// подтверждает, что команда действительно что-то сделала, а список
+    /// ошибок — что именно осталось включённым.
+    /// </summary>
+    private async Task<string?> MuteAllAudioAsync(CancellationToken cancellationToken)
+    {
+        if (!client.IsConnected)
+        {
+            throw new InvalidOperationException("OBS не подключена");
+        }
+
+        var result = await client.MuteAllAudioAsync(cancellationToken).ConfigureAwait(false);
+
+        if (result.FailedInputs.Count > 0)
+        {
+            return $"Звук выключен не полностью. Не удалось: {string.Join(", ", result.FailedInputs)}";
+        }
+
+        return result.MutedCount == 0
+            ? "В OBS нет источников со звуком"
+            : $"Весь звук выключен (источников: {result.MutedCount})";
     }
 
     private Task SetMuteAsync(ParsedCommand command, bool muted, CancellationToken cancellationToken) =>

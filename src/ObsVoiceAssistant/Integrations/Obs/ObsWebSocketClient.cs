@@ -1,8 +1,10 @@
 using OBSWebsocketDotNet;
+using OBSWebsocketDotNet.Types;
+using OBSWebsocketDotNet.Types.Events;
 
 namespace ObsVoiceAssistant.Integrations.Obs;
 
-public sealed class ObsWebSocketClient : IObsClient, IDisposable
+public sealed class ObsWebSocketClient : IObsClient, IObsSavedFileSource, IDisposable
 {
     private readonly OBSWebsocket client = new();
     private readonly ObsConnectionOptions options;
@@ -12,7 +14,11 @@ public sealed class ObsWebSocketClient : IObsClient, IDisposable
     public ObsWebSocketClient(ObsConnectionOptions options)
     {
         this.options = options;
+        client.RecordStateChanged += OnRecordStateChanged;
+        client.ReplayBufferSaved += OnReplayBufferSaved;
     }
+
+    public event Action<ObsSavedFile>? SavedFile;
 
     public bool IsConnected => client.IsIdentified;
 
@@ -94,6 +100,41 @@ public sealed class ObsWebSocketClient : IObsClient, IDisposable
             },
             cancellationToken);
 
+    public Task<ObsMuteAllResult> MuteAllAudioAsync(CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            () =>
+            {
+                var mutedCount = 0;
+                var failedInputs = new List<string>();
+
+                foreach (var input in client.GetInputList())
+                {
+                    var inputName = input.InputName;
+                    if (string.IsNullOrWhiteSpace(inputName))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        client.SetInputMute(inputName, true);
+                        mutedCount++;
+                    }
+                    catch (ErrorResponseException exception) when (exception.ErrorCode == 604)
+                    {
+                        // Видеоисточники без звука: выключать нечего.
+                    }
+                    catch (ErrorResponseException)
+                    {
+                        // Источник мог исчезнуть между получением списка и выключением.
+                        failedInputs.Add(inputName);
+                    }
+                }
+
+                return new ObsMuteAllResult(mutedCount, failedInputs);
+            },
+            cancellationToken);
+
     public Task<IReadOnlyList<string>> GetInputNamesAsync(CancellationToken cancellationToken = default) =>
         ExecuteAsync<IReadOnlyList<string>>(
             () => client.GetInputList()
@@ -104,6 +145,10 @@ public sealed class ObsWebSocketClient : IObsClient, IDisposable
 
     public void Dispose()
     {
+        client.RecordStateChanged -= OnRecordStateChanged;
+        client.ReplayBufferSaved -= OnReplayBufferSaved;
+        SavedFile = null;
+
         try
         {
             client.Disconnect();
@@ -114,6 +159,41 @@ public sealed class ObsWebSocketClient : IObsClient, IDisposable
         }
 
         connectionLock.Dispose();
+    }
+
+    /// <summary>
+    /// OBS сообщает о каждом состоянии записи, но имя файла появляется только
+    /// в состоянии STOPPED. Остальные состояния для переименования бесполезны.
+    /// </summary>
+    private void OnRecordStateChanged(object? sender, RecordStateChangedEventArgs args)
+    {
+        if (args.OutputState.State != OutputState.OBS_WEBSOCKET_OUTPUT_STOPPED)
+        {
+            return;
+        }
+
+        RaiseSavedFile(args.OutputState.OutputPath, ObsSavedFileKind.Recording);
+    }
+
+    private void OnReplayBufferSaved(object? sender, ReplayBufferSavedEventArgs args) =>
+        RaiseSavedFile(args.SavedReplayPath, ObsSavedFileKind.Replay);
+
+    private void RaiseSavedFile(string? filePath, ObsSavedFileKind kind)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            // OBS не сообщил путь: переименовывать нечего, но и падать нельзя.
+            return;
+        }
+
+        try
+        {
+            SavedFile?.Invoke(new ObsSavedFile(filePath, kind));
+        }
+        catch
+        {
+            // Обработчик не должен ломать поток событий OBS; он сам пишет ошибку в лог.
+        }
     }
 
     private static Task ExecuteAsync(Action operation, CancellationToken cancellationToken)

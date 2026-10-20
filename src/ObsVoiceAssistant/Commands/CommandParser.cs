@@ -82,9 +82,23 @@ public sealed class CommandParser
         // 3. Исправление слов с проверкой смысла получившейся команды.
         var corrections = new List<TokenCorrection>();
         var (command, matchedText) = MatchCorrected(withoutFillers, corrections);
-        return command is not null
-            ? new ParseResult(command, matchedText, corrections)
-            : ParseResult.NotFound(text);
+        if (command is not null)
+        {
+            return new ParseResult(command, matchedText, corrections);
+        }
+
+        // 4. Исправление фразы целиком: Vosk часто переставляет или сливает слова,
+        // поэтому посимвольное расстояние надёжнее правки одного слова.
+        var fuzzy = MatchFuzzy(withoutFillers);
+        if (fuzzy is not null)
+        {
+            return new ParseResult(
+                fuzzy.Value.Command,
+                fuzzy.Value.Phrase,
+                new[] { new TokenCorrection(withoutFillers, fuzzy.Value.Phrase) });
+        }
+
+        return ParseResult.NotFound(text);
     }
 
     /// <summary>
@@ -94,7 +108,9 @@ public sealed class CommandParser
     public PhraseSuggestion? SuggestClosest(string recognizedText)
     {
         var text = CommandVocabulary.Normalize(recognizedText);
-        if (text.Length == 0)
+        // Для коротких слов и отрицаний «ближайшая фраза» почти всегда случайна:
+        // «не» не должно подсказывать «мут», а «мод» — добавлять себя в словарь.
+        if (text.Length < 4 || CommandVocabulary.ContainsNegation(text))
         {
             return null;
         }
@@ -236,6 +252,283 @@ public sealed class CommandParser
 
         return (commands.Values.First(), matchedText);
     }
+
+    /// <summary>
+    /// Подбирает ближайшую команду по расстоянию всей фразы. Это ловит ошибки,
+    /// которые не исправляются по одному слову: «нашли запись», «начни с три»,
+    /// «основании запись». Дальние догадки ограничены: до трёх правок на всю
+    /// фразу, а больше — только когда расходится первый глагол, а остальное
+    /// совпало точно. Так «включи музыку потише» не превращается в команду.
+    /// </summary>
+    private (ParsedCommand Command, string Phrase)? MatchFuzzy(string text)
+    {
+        // Совсем короткие фразы и фразы без единого канонического слова
+        // не додумываем: это почти всегда фоновая речь.
+        if (text.Length < 8 || !ContainsCanonicalToken(text))
+        {
+            return null;
+        }
+
+        const int searchLimit = 5;
+        var inputFirst = GetFirstToken(text);
+        var bestDistance = int.MaxValue;
+        var bestPhrases = new List<string>();
+        var bestCommands = new Dictionary<string, ParsedCommand>(StringComparer.Ordinal);
+
+        foreach (var (phraseText, phrase) in phraseLookup)
+        {
+            // «Включи весь звук» не должно становиться «выключи весь звук»
+            // из-за одной ошибки распознавания: направление команды важнее.
+            if (CommandVocabulary.AreOppositeVerbs(inputFirst, GetFirstToken(phraseText)))
+            {
+                continue;
+            }
+
+            var distance = Distance(text, phraseText, searchLimit);
+            if (distance > searchLimit)
+            {
+                continue;
+            }
+
+            var command = new ParsedCommand(phrase.Intent, Target: phrase.Target);
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestPhrases.Clear();
+                bestPhrases.Add(phraseText);
+                bestCommands.Clear();
+                bestCommands[Identify(command)] = command;
+            }
+            else if (distance == bestDistance)
+            {
+                bestPhrases.Add(phraseText);
+                bestCommands[Identify(command)] = command;
+            }
+        }
+
+        // Разные команды на одном расстоянии — не угадываем.
+        if (bestCommands.Count != 1)
+        {
+            return null;
+        }
+
+        // Лишнее слово нельзя просто «списать» в расстояние: «включи браузер же»
+        // и «на запусти стрим» должны остаться нераспознанными. Совпадение по
+        // числу слов или объяснимое слияние/разделение — обязательное условие.
+        var matchedPhrase = bestPhrases.FirstOrDefault(phrase => TokenCountsAreCompatible(text, phrase));
+        if (matchedPhrase is null)
+        {
+            return null;
+        }
+
+        var accepted = bestDistance <= 3 ||
+            (bestDistance <= searchLimit && IsFirstTokenOnlyMismatch(text, matchedPhrase));
+
+        return accepted
+            ? (bestCommands.Values.First(), matchedPhrase)
+            : null;
+    }
+
+    /// <summary>
+    /// Проверяет, что различие в числе слов объясняется слиянием или разделением
+    /// соседних слов, а не потерянным или добавленным словом.
+    /// </summary>
+    private static bool TokenCountsAreCompatible(string text, string phraseText)
+    {
+        var input = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var phrase = phraseText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (input.Length == phrase.Length)
+        {
+            return TokensAreSimilarEnough(input, phrase);
+        }
+
+        if (input.Length == phrase.Length + 1)
+        {
+            return CanMergeAdjacentInputTokens(input, phrase);
+        }
+
+        if (input.Length + 1 == phrase.Length)
+        {
+            return CanSplitPhraseToken(input, phrase);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// При одинаковом числе слов проверяет, что изменённые слова действительно
+    /// похожи. Иначе «выключи окно» превратилось бы в «выключи микро», а
+    /// «это запись» — в «стоп запись».
+    /// </summary>
+    private static bool TokensAreSimilarEnough(string[] input, string[] phrase)
+    {
+        for (var index = 0; index < input.Length; index++)
+        {
+            if (string.Equals(input[index], phrase[index], StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // Первое слово — глагол. Короткие служебные слова («это», «вот»,
+            // «наш») не должны становиться командой только из-за расстояния.
+            // Исключение — опечатка в одну букву: «стп стрим» → «стоп стрим».
+            if (index == 0)
+            {
+                if (input[index].Length < 5 &&
+                    Distance(input[index], phrase[index], 1) > 1)
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            // Для остальных слов требуем общего фрагмента из трёх букв:
+            // «рим»→«стрим», «записи»→«запись». «Эти»→«стоп» так не пройдёт.
+            if (!HasCommonSubstringOfLength(input[index], phrase[index], 3))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Есть ли у строк общий непрерывный фрагмент нужной длины.</summary>
+    private static bool HasCommonSubstringOfLength(string left, string right, int length)
+    {
+        if (left.Length < length || right.Length < length)
+        {
+            return false;
+        }
+
+        for (var start = 0; start <= left.Length - length; start++)
+        {
+            if (right.Contains(left.Substring(start, length), StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>«с три» → «стрим»: два коротких слова слились в одно.</summary>
+    private static bool CanMergeAdjacentInputTokens(string[] input, string[] phrase)
+    {
+        for (var index = 0; index < input.Length - 1; index++)
+        {
+            if (Math.Min(input[index].Length, input[index + 1].Length) > 2)
+            {
+                continue;
+            }
+
+            if (Distance(input[index] + input[index + 1], phrase[index], 1) > 1)
+            {
+                continue;
+            }
+
+            var matches = true;
+            for (var position = 0; position < phrase.Length; position++)
+            {
+                if (position == index)
+                {
+                    continue;
+                }
+
+                var inputPosition = position < index ? position : position + 1;
+                if (!string.Equals(input[inputPosition], phrase[position], StringComparison.Ordinal))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>«навстречу» → «на стриме»: одно слово распалось на два.</summary>
+    private static bool CanSplitPhraseToken(string[] input, string[] phrase)
+    {
+        for (var index = 0; index < phrase.Length - 1; index++)
+        {
+            var joined = phrase[index] + phrase[index + 1];
+            if (Distance(input[index], joined, 4) > 4)
+            {
+                continue;
+            }
+
+            var matches = true;
+            for (var position = 0; position < input.Length; position++)
+            {
+                if (position == index)
+                {
+                    continue;
+                }
+
+                var phrasePosition = position < index ? position : position + 1;
+                if (!string.Equals(input[position], phrase[phrasePosition], StringComparison.Ordinal))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Проверяет, что все слова, кроме первого, совпали точно. Первое слово —
+    /// глагол: «основании запись» может отличаться от «останови запись» сильнее,
+    /// чем допускает правка одного слова, но цель уже однозначна.
+    /// </summary>
+    private static bool IsFirstTokenOnlyMismatch(string text, string phraseText)
+    {
+        var input = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var phrase = phraseText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (input.Length != phrase.Length || input.Length < 2 || input[0].Length < 5)
+        {
+            return false;
+        }
+
+        for (var index = 1; index < input.Length; index++)
+        {
+            if (!string.Equals(input[index], phrase[index], StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Первое слово фразы: обычно это глагол команды.</summary>
+    private static string GetFirstToken(string text)
+    {
+        var space = text.IndexOf(' ');
+        return space < 0 ? text : text[..space];
+    }
+
+    /// <summary>Есть ли во фразе слово, которое уже точно есть в словаре команд.</summary>
+    private static bool ContainsCanonicalToken(string text) =>
+        text
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Any(CommandVocabulary.Tokens.Contains);
 
     /// <summary>
     /// Находит начало аргумента — позицию после префикса команды с аргументом.
