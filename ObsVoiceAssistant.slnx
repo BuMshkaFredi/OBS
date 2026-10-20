@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ObsVoiceAssistant/ObsVoiceAssistant.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CustomerMail.UnitTests/CustomerMail.UnitTests.csproj" />
+    <Project Path="tests/ObsVoiceAssistant.IntegrationTests/ObsVoiceAssistant.IntegrationTests.csproj" />
+    <Project Path="tests/ObsVoiceAssistant.UnitTests/ObsVoiceAssistant.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/CustomerMail/CustomerMail.csproj" />
+  </Folder>
+</Solution>

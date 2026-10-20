@@ -26,6 +26,8 @@ temp/
 *.tmp
 
 # --- Сборка / зависимости ---
+bin/
+obj/
 node_modules/
 dist/
 build/
@@ -41,3 +43,15 @@ crash-reports/
 # Резервные копии сцен и профилей
 *.bak
 *-backup/
+
+# Speech models are downloaded separately and must not be committed.
+models/*
+!models/.gitkeep
+
+# --- Переписка с заказчиком: персональные данные не коммитятся ---
+docs/customer-questions/policy.json
+docs/customer-questions/answers/*
+!docs/customer-questions/answers/.gitkeep
+docs/customer-questions/audit/*
+!docs/customer-questions/audit/.gitkeep
+

@@ -1,0 +1,20 @@
+{
+  "customerAddress": "zakazchik@example.com",
+  "fromAddress": "your-mail@gmail.com",
+  "smtp": {
+    "host": "smtp.gmail.com",
+    "port": 465,
+    "security": "ssl"
+  },
+  "imap": {
+    "host": "imap.gmail.com",
+    "port": 993,
+    "security": "ssl"
+  },
+  "limits": {
+    "maxEmailsPerDay": 3,
+    "maxQuestionsPerBatch": 12,
+    "maxQuestionCharacters": 350,
+    "maxBodyCharacters": 7000
+  }
+}

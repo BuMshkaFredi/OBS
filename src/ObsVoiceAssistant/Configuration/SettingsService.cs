@@ -1,0 +1,56 @@
+using System.IO;
+using System.Text.Json;
+using ObsVoiceAssistant.Integrations.Obs;
+using ObsVoiceAssistant.Security;
+
+namespace ObsVoiceAssistant.Configuration;
+
+public sealed record AppSettings(
+    string ObsUrl = "ws://127.0.0.1:4455")
+{
+    /// <summary>
+    /// Имена OBS-источников для команд mute/unmute. Задаются в окне настройки OBS,
+    /// потому что имена источников у каждого пользователя свои.
+    /// </summary>
+    public ObsAudioInputs AudioInputs { get; init; } = new();
+}
+
+public sealed class SettingsService
+{
+    private const string ObsPasswordKey = "obs.websocket.password";
+    private readonly string settingsPath;
+    private readonly DpapiSecretStore secretStore;
+
+    public SettingsService(string? dataDirectory = null, DpapiSecretStore? secretStore = null)
+    {
+        var directory = dataDirectory ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ObsVoiceAssistant");
+        Directory.CreateDirectory(directory);
+        settingsPath = Path.Combine(directory, "settings.json");
+        this.secretStore = secretStore ?? new DpapiSecretStore(Path.Combine(directory, "secrets"));
+    }
+
+    public AppSettings Load()
+    {
+        if (!File.Exists(settingsPath))
+        {
+            return new AppSettings();
+        }
+
+        var json = File.ReadAllText(settingsPath);
+        return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+    }
+
+    public void Save(AppSettings settings)
+    {
+        var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(settingsPath, json);
+    }
+
+    public void SaveObsPassword(string password) => secretStore.Save(ObsPasswordKey, password);
+
+    public string? LoadObsPassword() => secretStore.Load(ObsPasswordKey);
+
+    public void DeleteObsPassword() => secretStore.Delete(ObsPasswordKey);
+}
