@@ -10,12 +10,14 @@ public sealed class CapsLockHook : IDisposable
     private const int VkCapital = 0x14;
 
     private readonly PushToTalkController controller;
+    private readonly Action<Exception>? errorHandler;
     private readonly HookProc callback;
     private nint hookHandle;
 
-    public CapsLockHook(PushToTalkController controller)
+    public CapsLockHook(PushToTalkController controller, Action<Exception>? errorHandler = null)
     {
         this.controller = controller;
+        this.errorHandler = errorHandler;
         callback = HandleKeyboardEvent;
     }
 
@@ -52,17 +54,31 @@ public sealed class CapsLockHook : IDisposable
         {
             if (wParam == WmKeydown)
             {
-                controller.KeyDown();
+                InvokeSafely(controller.KeyDown);
             }
             else if (wParam == WmKeyup)
             {
-                controller.KeyUp();
+                InvokeSafely(controller.KeyUp);
             }
 
             return 1;
         }
 
         return CallNextHookEx(hookHandle, code, wParam, lParam);
+    }
+
+    private void InvokeSafely(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception exception)
+        {
+            // Исключение из низкоуровневого хука не должно завершать процесс:
+            // пользователь должен увидеть уведомление и повторить попытку.
+            errorHandler?.Invoke(exception);
+        }
     }
 
     private delegate nint HookProc(int code, nint wParam, nint lParam);

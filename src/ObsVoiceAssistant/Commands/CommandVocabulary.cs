@@ -184,6 +184,8 @@ public static class CommandVocabulary
 
         // Стрим: старт.
         new("начни стрим", CommandIntent.StartStream),
+        // Vosk слышит «начни стрим» как «начни стареем»; формулировка взята из лога.
+        new("начни стареем", CommandIntent.StartStream),
         new("начать стрим", CommandIntent.StartStream),
         new("начинай стрим", CommandIntent.StartStream),
         new("начинаем стрим", CommandIntent.StartStream),

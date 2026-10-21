@@ -63,6 +63,22 @@ public sealed class VoiceCommandPipeline
             return;
         }
 
+        await ProcessTextAsync(text, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Выполняет команду по уже распознанному тексту. Нужен режиму ключевого слова:
+    /// сначала текст проверяется на «Бочи», и только остаток уходит в обычный разбор.
+    /// </summary>
+    public async Task ProcessTextAsync(string text, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            diagnostic?.Invoke("Пустой текст: разбор команды пропущен");
+            compactNotify?.Invoke("Не расслышал команду");
+            return;
+        }
+
         var parseResult = parser.ParseWithDetails(text);
         var command = parseResult.Command;
         if (command is null)

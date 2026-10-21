@@ -72,6 +72,7 @@ public sealed class CommandCorrectionTests
     [InlineData("охране повтор", CommandIntent.SaveReplay, null)]
     [InlineData("замок микрофон", CommandIntent.ToggleInput, "microphone")]
     [InlineData("начни с три", CommandIntent.StartStream, null)]
+    [InlineData("начни стареем", CommandIntent.StartStream, null)]
     [InlineData("начать рим", CommandIntent.StartStream, null)]
     [InlineData("начни с прим", CommandIntent.StartStream, null)]
     [InlineData("начнем трансляцию", CommandIntent.StartStream, null)]

@@ -56,6 +56,7 @@ public sealed class ContinuousListeningService : IAsyncDisposable
 
     private Task? listeningTask;
     private Task? processingTask;
+    private int suspended;
 
     public ContinuousListeningService(
         IAudioRecorder recorder,
@@ -74,6 +75,18 @@ public sealed class ContinuousListeningService : IAsyncDisposable
         listeningTask ??= ListenAsync();
         processingTask ??= ProcessPendingAsync();
     }
+
+    /// <summary>
+    /// Останавливает запись и отбрасывает текущую фразу. Нужно, когда микрофон
+    /// на время занимает Push-to-talk: иначе одна и та же речь была бы
+    /// обработана дважды — как команда по кнопке и как команда после ключевого слова.
+    /// </summary>
+    public void Suspend() => Interlocked.Exchange(ref suspended, 1);
+
+    /// <summary>Возвращает непрерывное прослушивание после отпускания Caps Lock.</summary>
+    public void Resume() => Interlocked.Exchange(ref suspended, 0);
+
+    public bool IsSuspended => Volatile.Read(ref suspended) == 1;
 
     public async ValueTask DisposeAsync()
     {
@@ -104,6 +117,14 @@ public sealed class ContinuousListeningService : IAsyncDisposable
     {
         while (!cancellation.IsCancellationRequested)
         {
+            if (IsSuspended)
+            {
+                // Пока микрофон занят Push-to-talk, запись не держим: иначе
+                // в сегмент попадёт речь, которую уже записал Caps Lock.
+                await Task.Delay(options.PollInterval, cancellation.Token).ConfigureAwait(false);
+                continue;
+            }
+
             try
             {
                 var recording = await CaptureUtteranceAsync().ConfigureAwait(false);
@@ -173,10 +194,17 @@ public sealed class ContinuousListeningService : IAsyncDisposable
         var speechDuration = TimeSpan.Zero;
         var silenceDuration = TimeSpan.Zero;
         var utteranceDuration = TimeSpan.Zero;
+        var discarded = false;
 
         while (!cancellation.IsCancellationRequested)
         {
             await Task.Delay(options.PollInterval, cancellation.Token).ConfigureAwait(false);
+
+            if (IsSuspended)
+            {
+                discarded = true;
+                break;
+            }
 
             var snapshot = recorder.Snapshot();
             var tailSamples = (int)(snapshot.SampleRate * options.SpeechTailDuration.TotalSeconds);
@@ -213,7 +241,7 @@ public sealed class ContinuousListeningService : IAsyncDisposable
         }
 
         var recording = recorder.Stop();
-        if (!speechDetected || speechDuration < options.MinUtterance)
+        if (discarded || !speechDetected || speechDuration < options.MinUtterance)
         {
             return null;
         }

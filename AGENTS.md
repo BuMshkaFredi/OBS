@@ -48,6 +48,9 @@
 - Голосовые команды только на русском языке.
 - Распознавание речи полностью офлайн.
 - Push-to-talk: зажать `Caps Lock` → говорить → отпустить. Обычное переключение Caps Lock приложение не должно выполнять.
+- Одновременно с Push-to-talk работает активация по ключевому слову «Бочи»: слово можно сказать отдельно (тогда следующая фраза в течение 6 секунд считается командой) или сразу перед командой. Фоновая речь без ключевого слова не выполняется.
+- В ключевом слове допускается одна ошибка распознавания, но первая буква должна остаться «б»: «бачи», «боци», «бочу» срабатывают, «ночи» — нет. Две ошибки не допускаются.
+- Пока нажат `Caps Lock`, прослушивание ключевого слова приостанавливается, а текущая фраза отбрасывается, чтобы команда не выполнилась дважды.
 - Целевое время обработки короткой команды после отпускания клавиши: не более 1–1,5 секунды, если это возможно на целевом оборудовании.
 - Целевые компьютеры: Ryzen 5 5500H / 16 GB RAM и Ryzen 5 3600 / RTX 5060 / 16 GB RAM.
 - Основная платформа стриминга: Twitch.
@@ -103,6 +106,7 @@
 - Высокоуровневое описание: UI/tray, захват аудио, распознавание речи, разбор команд и application orchestration не должны зависеть от конкретной реализации OBS или Twitch. OBS WebSocket, Twitch API, Windows notifications и speech engine подключаются через отдельные адаптеры.
 - Основные модули / bounded contexts: `App`, `Tray`, `Audio`, `Speech`, `Commands`, `Integrations/Obs`, `Integrations/Twitch`, `Configuration`, `Security`, `Notifications`, `Recordings`.
 - Основной поток данных: `Caps Lock down -> microphone capture -> Caps Lock up -> offline speech recognition -> command parsing -> optional confirmation -> command dispatch -> OBS/Twitch adapter -> state update -> Windows notification`.
+- Второй поток данных: `постоянный microphone capture -> segmentation by silence -> wake word «Бочи» -> command text -> offline speech recognition/parse -> optional confirmation -> dispatch -> notification`. Команда после ключевого слова и Push-to-talk используют один `VoiceCommandPipeline`.
 - Подход к управлению состоянием: Runtime-состояние OBS/Twitch хранить в памяти и периодически синхронизировать с внешними системами; настройки сохранять локально; историю команд между запусками не сохранять.
 - Границы интеграций: OBS WebSocket 5.x, Twitch OAuth/Helix API, Windows global hotkey/input, Windows toast notifications, локальный speech inference engine.
 - Зоны миграции: На старте миграции нет. Будущую панель настроек добавлять поверх существующих typed services и не переносить бизнес-логику в UI.
@@ -122,6 +126,9 @@
 - Браузер сохраняет явные mute/unmute. Музыка стрима устроена так же, но распознаётся только по слову «стрим»: «выключи музыку стрима», «включи звук стрима». Формулировка без «музыки»/«звука» остаётся управлением трансляцией: «выключи стрим» — остановка стрима.
 - Команда «ол мут» (варианты «all mute», «выключи весь звук», «заглуши все») выключает звук у всех аудиоисточников OBS, а не только у настроенных ролей. Видеоисточники без звука пропускаются по ошибке OBS 604; частичный сбой перечисляется в уведомлении. Команда не останавливает стрим или запись.
 - Не смешивать перехват Caps Lock, запись аудио и распознавание в одном классе.
+- Логика ключевого слова «Бочи» размещается в `Speech/WakeWordSession`, а не в `App`: `App` только передаёт распознанный текст и получает решение `Ignored`/`Armed`/`Command`.
+- Push-to-talk имеет приоритет над ключевым словом: на время записи по Caps Lock непрерывное прослушивание приостанавливается, текущая фраза отбрасывается, окно ожидания «Бочи» закрывается.
+- Оба режима используют один экземпляр `ISpeechRecognizer`; вызовы Vosk сериализуются, потому что движок не рассчитан на параллельное распознавание.
 - Перед созданием новой абстракции переиспользовать существующие контракты в соответствующем модуле.
 - Ошибка соединения с OBS/Twitch должна обрабатываться через retry/reconnect service, а не через бесконечные циклы в UI.
 
@@ -181,7 +188,7 @@ repo-root/
 | --- | --- | --- | --- |
 | `src/ObsVoiceAssistant/App` | Запуск и сборка приложения | composition root, single-instance guard | бизнес-логика команд и HTTP-код |
 | `src/ObsVoiceAssistant/Tray` | Системный трей | tray icon, menu, status view model | прямые вызовы OBS/Twitch |
-| `src/ObsVoiceAssistant/Audio` | Push-to-talk и audio capture | global key handling, microphone buffer | parser и интеграционный код |
+| `src/ObsVoiceAssistant/Audio` | Push-to-talk, постоянное прослушивание и audio capture | global key handling, microphone buffer, разбиение речи по паузам | parser и интеграционный код |
 | `src/ObsVoiceAssistant/Speech` | Локальное распознавание | engine wrapper, model manager, recognition result | OAuth, настройки OBS |
 | `src/ObsVoiceAssistant/Commands` | Преобразование речи в действие | intent, parser, dispatcher, confirmation policy | platform-specific HTTP/SDK details |
 | `src/ObsVoiceAssistant/Integrations` | Внешние адаптеры | OBS WebSocket, Twitch API/OAuth | UI и хранение произвольных секретов |
@@ -270,6 +277,8 @@ repo-root/
 ### Обязательные сценарии MVP
 
 - Caps Lock down/up корректно ограничивает запись и не переключает состояние Caps Lock.
+- «Бочи» отдельно открывает окно ожидания, а «Бочи, начни запись» выполняет команду сразу; фоновая речь без ключевого слова ничего не выполняет.
+- Во время Caps Lock непрерывное прослушивание приостановлено: одна и та же команда не выполняется дважды.
 - Русская короткая команда распознаётся офлайн.
 - `начни запись`, `останови запись`, `начни стрим`, `сохрани повтор` вызывают правильные OBS requests.
 - Replay Buffer включается после подключения к OBS, но не включается повторно, если пользователь выключил его вручную.

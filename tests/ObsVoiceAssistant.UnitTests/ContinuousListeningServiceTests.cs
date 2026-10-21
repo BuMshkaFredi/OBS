@@ -168,6 +168,44 @@ public sealed class ContinuousListeningServiceTests
         Assert.True(order.Count >= 2);
     }
 
+    [Fact]
+    public async Task Suspend_DiscardsUtterance_AndResumeRestoresListening()
+    {
+        // На время Caps Lock непрерывное прослушивание обязано молчать,
+        // иначе одна и та же фраза выполнится дважды.
+        var recorder = new GatedRecorder();
+        var processed = new List<AudioRecording>();
+        var processedSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var service = new ContinuousListeningService(
+            recorder,
+            recording =>
+            {
+                processed.Add(recording);
+                processedSignal.TrySetResult();
+                return Task.CompletedTask;
+            },
+            CreateOptions());
+
+        service.Start();
+        recorder.Loud = true;
+        await Task.Delay(TimeSpan.FromMilliseconds(100));
+
+        service.Suspend();
+        recorder.Loud = false;
+        await Task.Delay(TimeSpan.FromMilliseconds(200));
+        Assert.Empty(processed);
+
+        service.Resume();
+        recorder.Loud = true;
+        await Task.Delay(TimeSpan.FromMilliseconds(80));
+        recorder.Loud = false;
+        await processedSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await service.DisposeAsync();
+
+        Assert.Single(processed);
+    }
+
     private static ContinuousListeningOptions CreateOptions(TimeSpan? maxUtterance = null) => new()
     {
         PollInterval = TimeSpan.FromMilliseconds(10),
@@ -200,6 +238,51 @@ public sealed class ContinuousListeningServiceTests
             SnapshotCalls++;
             AppendFrame(Pattern[position % Pattern.Length]);
             position++;
+            return Current();
+        }
+
+        public AudioRecording Stop() => Current();
+
+        private void AppendFrame(bool loud)
+        {
+            var count = SampleRate / 50; // 20 мс при 16 кГц.
+            for (var index = 0; index < count; index++)
+            {
+                samples.Add(loud ? (short)8_000 : (short)0);
+            }
+        }
+
+        private AudioRecording Current()
+        {
+            var bytes = new byte[samples.Count * 2];
+            for (var index = 0; index < samples.Count; index++)
+            {
+                var value = samples[index];
+                bytes[index * 2] = (byte)(value & 0xFF);
+                bytes[index * 2 + 1] = (byte)((value >> 8) & 0xFF);
+            }
+
+            return new AudioRecording(bytes, SampleRate, 1);
+        }
+    }
+
+    /// <summary>
+    /// Микрофон с управляемой речью: тест сам решает, когда в записи есть голос.
+    /// Нужен, чтобы проверить паузу и возобновление непрерывного прослушивания.
+    /// </summary>
+    private sealed class GatedRecorder : IAudioRecorder
+    {
+        private readonly List<short> samples = new();
+
+        public volatile bool Loud;
+
+        public void Start()
+        {
+        }
+
+        public AudioRecording Snapshot()
+        {
+            AppendFrame(Loud);
             return Current();
         }
 
