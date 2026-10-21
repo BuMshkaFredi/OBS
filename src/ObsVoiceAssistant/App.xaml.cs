@@ -32,12 +32,28 @@ public partial class App : System.Windows.Application
     private VoiceCommandPipeline? voiceCommandPipeline;
     private ISpeechRecognizer? speechRecognizer;
     private RecordingNamingService? recordingNaming;
+    private SingleInstanceGuard? singleInstance;
     private bool? lastObsConnectionState;
     private readonly AssistantLogger logger = new();
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Второй экземпляр создал бы второй глобальный обработчик Caps Lock и второе
+        // непрерывное прослушивание микрофона. Поэтому он только сообщает о себе
+        // и завершается, оставляя работу первому экземпляру.
+        singleInstance = new SingleInstanceGuard();
+        if (!singleInstance.IsPrimary)
+        {
+            System.Windows.MessageBox.Show(
+                "OBS Voice Assistant уже запущен. Управление доступно из значка в системном трее.",
+                "OBS Voice Assistant",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            Shutdown();
+            return;
+        }
 
         settingsService = new SettingsService();
         trayIcon = new TrayIconService(ShowObsSettings, Shutdown);
@@ -137,6 +153,7 @@ public partial class App : System.Windows.Application
         notifications?.Dispose();
         obsClient?.Dispose();
         trayIcon?.Dispose();
+        singleInstance?.Dispose();
         base.OnExit(e);
     }
 
