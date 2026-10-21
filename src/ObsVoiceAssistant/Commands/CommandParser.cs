@@ -61,6 +61,14 @@ public sealed class CommandParser
             return ParseResult.NotFound(text);
         }
 
+        // Команда громкости имеет переменное число и цель, поэтому разбирается
+        // отдельной формой, а не словарём целых фраз.
+        var volume = VolumeCommandParser.TryParse(recognizedText, out var volumeCorrections);
+        if (volume is not null)
+        {
+            return new ParseResult(volume, text, volumeCorrections);
+        }
+
         // 1. Точное совпадение — основной и самый безопасный путь.
         var exact = Match(text, out _);
         if (exact is not null)

@@ -100,6 +100,19 @@ public sealed class ObsWebSocketClient : IObsClient, IObsSavedFileSource, IDispo
             },
             cancellationToken);
 
+    public Task<float> GetInputVolumeAsync(
+        string inputName,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(() => client.GetInputVolume(inputName).VolumeMul, cancellationToken);
+
+    public Task SetInputVolumeAsync(
+        string inputName,
+        float volumeMultiplier,
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync(
+            () => client.SetInputVolume(inputName, volumeMultiplier, false),
+            cancellationToken);
+
     public Task<ObsMuteAllResult> MuteAllAudioAsync(CancellationToken cancellationToken = default) =>
         ExecuteAsync(
             () =>

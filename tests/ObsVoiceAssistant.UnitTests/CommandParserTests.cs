@@ -103,6 +103,7 @@ public sealed class ConfirmationPolicyTests
     [InlineData(CommandIntent.MuteInput)]
     [InlineData(CommandIntent.ToggleInput)]
     [InlineData(CommandIntent.MuteAllAudio)]
+    [InlineData(CommandIntent.AdjustInputVolume)]
     public void SafeCommands_DoNotRequireConfirmation(CommandIntent intent)
     {
         Assert.False(policy.RequiresConfirmation(intent));

@@ -179,6 +179,7 @@ public sealed class VoiceCommandPipeline
         CommandIntent.MuteInput => $"выключить {CommandTargets.Accusative(command.Target)}",
         CommandIntent.UnmuteInput => $"включить {CommandTargets.Accusative(command.Target)}",
         CommandIntent.ToggleInput => $"переключить {CommandTargets.Accusative(command.Target)}",
+        CommandIntent.AdjustInputVolume => $"изменить громкость {CommandTargets.Genitive(command.Target)}",
         CommandIntent.MuteAllAudio => "выключить весь звук",
         CommandIntent.SetStreamTitle => "изменить название",
         CommandIntent.SetStreamCategory => "изменить категорию",

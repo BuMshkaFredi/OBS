@@ -166,13 +166,103 @@ public sealed class ObsCommandAdapterTests
         Assert.Contains("не подключена", exception.Message);
     }
 
+    [Fact]
+    public async Task AdjustVolume_ChangesVolumeByPercentAndReportsActualValue()
+    {
+        var client = new FakeObsClient { VolumeMultiplier = 0.5f };
+        var adapter = new ObsCommandAdapter(
+            client,
+            new ConfiguredObsInputResolver(new ObsAudioInputs(Microphone: "Mic/Aux")));
+
+        var message = await adapter.ExecuteAsync(
+            new ParsedCommand(CommandIntent.AdjustInputVolume, Target: "microphone", Delta: 10));
+
+        Assert.Equal("Mic/Aux", client.LastVolume!.Value.Name);
+        Assert.Equal(0.6f, client.LastVolume.Value.Volume, 3);
+        Assert.Equal("Громкость микрофона 60%", message);
+    }
+
+    [Fact]
+    public async Task AdjustVolume_ClampsAtMaximum()
+    {
+        var client = new FakeObsClient { VolumeMultiplier = 0.95f };
+        var adapter = new ObsCommandAdapter(
+            client,
+            new ConfiguredObsInputResolver(new ObsAudioInputs(Microphone: "Mic/Aux")));
+
+        var message = await adapter.ExecuteAsync(
+            new ParsedCommand(CommandIntent.AdjustInputVolume, Target: "microphone", Delta: 10));
+
+        Assert.Equal(1f, client.LastVolume!.Value.Volume, 3);
+        Assert.Equal("Громкость микрофона 100%", message);
+    }
+
+    [Fact]
+    public async Task AdjustVolume_ClampsAtMinimum()
+    {
+        var client = new FakeObsClient { VolumeMultiplier = 0.03f };
+        var adapter = new ObsCommandAdapter(
+            client,
+            new ConfiguredObsInputResolver(new ObsAudioInputs(Microphone: "Mic/Aux")));
+
+        var message = await adapter.ExecuteAsync(
+            new ParsedCommand(CommandIntent.AdjustInputVolume, Target: "microphone", Delta: -10));
+
+        Assert.Equal(0f, client.LastVolume!.Value.Volume, 3);
+        Assert.Equal("Громкость микрофона 0%", message);
+    }
+
+    [Fact]
+    public async Task AdjustVolume_UsesConfiguredStreamMusicSource()
+    {
+        var client = new FakeObsClient { VolumeMultiplier = 0.4f };
+        var adapter = new ObsCommandAdapter(
+            client,
+            new ConfiguredObsInputResolver(new ObsAudioInputs(StreamMusic: "Музыка стрима")));
+
+        var message = await adapter.ExecuteAsync(
+            new ParsedCommand(CommandIntent.AdjustInputVolume, Target: "stream_music", Delta: -5));
+
+        Assert.Equal("Музыка стрима", client.LastVolume!.Value.Name);
+        Assert.Equal(0.35f, client.LastVolume.Value.Volume, 3);
+        Assert.Equal("Громкость музыки стрима 35%", message);
+    }
+
+    [Fact]
+    public async Task AdjustVolume_WithoutDelta_Throws()
+    {
+        var adapter = new ObsCommandAdapter(
+            new FakeObsClient(),
+            new ConfiguredObsInputResolver(new ObsAudioInputs(Microphone: "Mic/Aux")));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            adapter.ExecuteAsync(new ParsedCommand(CommandIntent.AdjustInputVolume, Target: "microphone")));
+    }
+
+    [Fact]
+    public async Task AdjustVolume_WithoutConfiguredInput_Throws()
+    {
+        var adapter = new ObsCommandAdapter(
+            new FakeObsClient(),
+            new ConfiguredObsInputResolver(new ObsAudioInputs()));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            adapter.ExecuteAsync(
+                new ParsedCommand(CommandIntent.AdjustInputVolume, Target: "microphone", Delta: 10)));
+
+        Assert.Contains("не настроен", exception.Message);
+        Assert.Contains("микрофона", exception.Message);
+    }
+
     private sealed class FakeObsClient : IObsClient
     {
         public bool IsConnected { get; set; } = true;
         public bool IsReplayBufferActive => false;
         public bool Muted { get; set; }
+        public float VolumeMultiplier { get; set; } = 0.5f;
         public (string Name, bool Muted)? LastMute { get; private set; }
         public string? LastToggle { get; private set; }
+        public (string Name, float Volume)? LastVolume { get; private set; }
         public ObsMuteAllResult MuteAllResult { get; set; } = new(0, Array.Empty<string>());
         public Task ConnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task DisconnectAsync() => Task.CompletedTask;
@@ -194,6 +284,19 @@ public sealed class ObsCommandAdapterTests
             LastToggle = inputName;
             Muted = !Muted;
             return Task.FromResult<bool?>(Muted);
+        }
+
+        public Task<float> GetInputVolumeAsync(string inputName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(VolumeMultiplier);
+
+        public Task SetInputVolumeAsync(
+            string inputName,
+            float volumeMultiplier,
+            CancellationToken cancellationToken = default)
+        {
+            LastVolume = (inputName, volumeMultiplier);
+            VolumeMultiplier = volumeMultiplier;
+            return Task.CompletedTask;
         }
 
         public Task<ObsMuteAllResult> MuteAllAudioAsync(CancellationToken cancellationToken = default) =>

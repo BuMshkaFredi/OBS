@@ -22,6 +22,15 @@ public interface IObsClient
     /// </summary>
     Task<bool?> ToggleInputMuteAsync(string inputName, CancellationToken cancellationToken = default);
 
+    /// <summary>Текущая громкость источника в долях от 0.0 до 1.0.</summary>
+    Task<float> GetInputVolumeAsync(string inputName, CancellationToken cancellationToken = default);
+
+    /// <summary>Устанавливает громкость источника в долях от 0.0 до 1.0.</summary>
+    Task SetInputVolumeAsync(
+        string inputName,
+        float volumeMultiplier,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Выключает звук у всех источников OBS, которые поддерживают аудио.
     /// Видеоисточники без звука пропускаются.
@@ -58,6 +67,7 @@ public sealed class ObsCommandAdapter : IObsCommandPort
             CommandIntent.MuteInput => Run(SetMuteAsync(command, true, cancellationToken)),
             CommandIntent.UnmuteInput => Run(SetMuteAsync(command, false, cancellationToken)),
             CommandIntent.ToggleInput => ToggleMuteAsync(command, cancellationToken),
+            CommandIntent.AdjustInputVolume => AdjustVolumeAsync(command, cancellationToken),
             CommandIntent.MuteAllAudio => MuteAllAudioAsync(cancellationToken),
             _ => throw new InvalidOperationException($"Intent {command.Intent} is not an OBS command.")
         };
@@ -99,6 +109,29 @@ public sealed class ObsCommandAdapter : IObsCommandPort
             false => messages.On,
             null => messages.Toggled
         };
+    }
+
+    /// <summary>
+    /// Меняет громкость источника на заданное число процентных пунктов.
+    /// Итог ограничивается диапазоном 0–100%: на максимуме «плюс 10» оставляет
+    /// 100%, а не уводит OBS в неожиданное значение.
+    /// </summary>
+    private async Task<string?> AdjustVolumeAsync(
+        ParsedCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (command.Delta is null)
+        {
+            throw new InvalidOperationException("Volume delta is missing.");
+        }
+
+        var inputName = ResolveInputName(command);
+        var current = await client.GetInputVolumeAsync(inputName, cancellationToken).ConfigureAwait(false);
+        var volume = Math.Clamp(current + command.Delta.Value / 100f, 0f, 1f);
+        await client.SetInputVolumeAsync(inputName, volume, cancellationToken).ConfigureAwait(false);
+
+        var percent = (int)Math.Round(volume * 100, MidpointRounding.AwayFromZero);
+        return $"Громкость {CommandTargets.Genitive(command.Target)} {percent}%";
     }
 
     /// <summary>

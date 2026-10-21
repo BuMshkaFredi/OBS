@@ -120,6 +120,12 @@ public sealed class ObsConnectionServiceTests
         public Task SetInputMuteAsync(string inputName, bool muted, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<bool?> ToggleInputMuteAsync(string inputName, CancellationToken cancellationToken = default) =>
             Task.FromResult<bool?>(null);
+        public Task<float> GetInputVolumeAsync(string inputName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(0f);
+        public Task SetInputVolumeAsync(
+            string inputName,
+            float volumeMultiplier,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<ObsMuteAllResult> MuteAllAudioAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new ObsMuteAllResult(0, Array.Empty<string>()));
         public Task<IReadOnlyList<string>> GetInputNamesAsync(CancellationToken cancellationToken = default) =>

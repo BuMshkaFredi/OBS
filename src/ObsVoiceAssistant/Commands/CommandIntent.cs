@@ -13,10 +13,12 @@ public enum CommandIntent
     ToggleInput,
     MuteAllAudio,
     SetStreamTitle,
-    SetStreamCategory
+    SetStreamCategory,
+    AdjustInputVolume
 }
 
 public sealed record ParsedCommand(
     CommandIntent Intent,
     string? Argument = null,
-    string? Target = null);
+    string? Target = null,
+    int? Delta = null);
