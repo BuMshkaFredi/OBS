@@ -123,7 +123,10 @@ public sealed class CommandParser
         var exact = Match(text, out _);
         if (exact is not null)
         {
-            return new ParseResult(exact, text, Array.Empty<TokenCorrection>());
+            return new ParseResult(
+                AttachRawArgument(exact, recognizedText, text),
+                text,
+                Array.Empty<TokenCorrection>());
         }
 
         // 2. Без слов-заполнителей: «начни запись пожалуйста».
@@ -133,7 +136,10 @@ public sealed class CommandParser
             var stripped = Match(withoutFillers, out _);
             if (stripped is not null)
             {
-                return new ParseResult(stripped, withoutFillers, Array.Empty<TokenCorrection>());
+                return new ParseResult(
+                    AttachRawArgument(stripped, recognizedText, withoutFillers),
+                    withoutFillers,
+                    Array.Empty<TokenCorrection>());
             }
         }
 
@@ -142,7 +148,10 @@ public sealed class CommandParser
         var (command, matchedText) = MatchCorrected(withoutFillers, corrections);
         if (command is not null)
         {
-            return new ParseResult(command, matchedText, corrections);
+            return new ParseResult(
+                AttachRawArgument(command, recognizedText, matchedText),
+                matchedText,
+                corrections);
         }
 
         // 4. Исправление фразы целиком: Vosk часто переставляет или сливает слова,
@@ -192,6 +201,53 @@ public sealed class CommandParser
         return best is not null && bestDistance <= limit
             ? new PhraseSuggestion(new CommandVocabulary.CommandPhrase(bestText, best.Intent, best.Target), bestDistance)
             : null;
+    }
+
+    /// <summary>
+    /// Возвращает аргумент в исходном написании. Для названия стрима это важно:
+    /// регистр и «!»-теги нельзя восстановить из нормализованного текста.
+    /// Если слова сопоставить не удалось (например, были слова-заполнители),
+    /// остаётся нормализованный аргумент.
+    /// </summary>
+    private static ParsedCommand AttachRawArgument(
+        ParsedCommand command,
+        string rawText,
+        string matchedText)
+    {
+        if (string.IsNullOrEmpty(command.Argument))
+        {
+            return command;
+        }
+
+        var argumentWords = command.Argument.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var matchedWords = matchedText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var rawWords = rawText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+
+        if (argumentWords.Length == 0 ||
+            argumentWords.Length >= matchedWords.Length ||
+            rawWords.Length != matchedWords.Length)
+        {
+            return command;
+        }
+
+        var rawArgument = string.Join(' ', rawWords[^argumentWords.Length..]);
+        rawArgument = TrimTrailingPunctuation(rawArgument).Trim();
+        return rawArgument.Length == 0 ? command : command with { Argument = rawArgument };
+    }
+
+    /// <summary>
+    /// Убирает пунктуацию в конце названия. Внутри текста она сохраняется:
+    /// «!tg» — тег, а восклицательный знак в конце не несёт смысла для Twitch.
+    /// </summary>
+    private static string TrimTrailingPunctuation(string value)
+    {
+        var end = value.Length;
+        while (end > 0 && value[end - 1] is '.' or ',' or ';' or ':' or '!' or '?' or '…')
+        {
+            end--;
+        }
+
+        return value[..end].TrimEnd();
     }
 
     private ParsedCommand? Match(string text, out int prefixWords)

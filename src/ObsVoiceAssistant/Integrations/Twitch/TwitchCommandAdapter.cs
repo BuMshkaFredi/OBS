@@ -9,7 +9,7 @@ namespace ObsVoiceAssistant.Integrations.Twitch;
 /// </summary>
 public sealed class TwitchCommandAdapter : ITwitchCommandPort
 {
-    private const int MaxTitleLength = 140;
+    private const int MaxTitleLength = TwitchTitleComposer.MaxTitleLength;
 
     private readonly ITwitchApiClient api;
 
@@ -22,6 +22,11 @@ public sealed class TwitchCommandAdapter : ITwitchCommandPort
         ParsedCommand command,
         CancellationToken cancellationToken = default)
     {
+        if (command.Intent == CommandIntent.SetStreamTitle)
+        {
+            return await PrepareTitleAsync(command, cancellationToken).ConfigureAwait(false);
+        }
+
         if (command.Intent != CommandIntent.SetStreamCategory)
         {
             return command;
@@ -47,6 +52,31 @@ public sealed class TwitchCommandAdapter : ITwitchCommandPort
             Argument = category.Name,
             ArgumentId = category.Id
         };
+    }
+
+    /// <summary>
+    /// Добавляет к новому названию теги текущего. Пользователь увидит итог
+    /// в подтверждении; слишком длинный результат отклоняется без вызова PATCH.
+    /// </summary>
+    private async Task<ParsedCommand> PrepareTitleAsync(
+        ParsedCommand command,
+        CancellationToken cancellationToken)
+    {
+        var title = command.Argument?.Trim();
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            throw new TwitchApiException("Не указано новое название трансляции.");
+        }
+
+        var channel = await api.GetChannelAsync(cancellationToken).ConfigureAwait(false);
+        var composition = TwitchTitleComposer.Compose(title, channel.Title);
+        if (!composition.IsSuccess)
+        {
+            throw new TwitchApiException(
+                composition.Error ?? "Не удалось собрать название трансляции.");
+        }
+
+        return command with { Argument = composition.Title };
     }
 
     public async Task<string?> ExecuteAsync(

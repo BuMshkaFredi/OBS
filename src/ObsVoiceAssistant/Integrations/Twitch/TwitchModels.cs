@@ -26,3 +26,6 @@ public sealed record TwitchValidation(
 public sealed record TwitchUser(string Id, string Login, string DisplayName);
 
 public sealed record TwitchCategory(string Id, string Name, string? BoxArtUrl);
+
+/// <summary>Текущие данные канала: название нужно для сохранения тегов.</summary>
+public sealed record TwitchChannel(string Title, string GameName, string GameId);

@@ -15,6 +15,8 @@ public interface ITwitchApiClient
         string query,
         CancellationToken cancellationToken = default);
 
+    Task<TwitchChannel> GetChannelAsync(CancellationToken cancellationToken = default);
+
     Task UpdateTitleAsync(string title, CancellationToken cancellationToken = default);
 
     Task UpdateCategoryAsync(string gameId, CancellationToken cancellationToken = default);
@@ -104,6 +106,28 @@ public sealed class TwitchApiClient : ITwitchApiClient
             boxArt.ValueKind == JsonValueKind.String
                 ? boxArt.GetString()
                 : null);
+    }
+
+    public async Task<TwitchChannel> GetChannelAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var auth = await EnsureAuthorizedAsync(cancellationToken).ConfigureAwait(false);
+        var url = $"{HelixBase}/channels?broadcaster_id={Uri.EscapeDataString(auth.UserId)}";
+        var body = await SendAuthorizedAsync(auth, HttpMethod.Get, url, body: null, cancellationToken)
+            .ConfigureAwait(false);
+
+        using var document = JsonDocument.Parse(body);
+        var data = document.RootElement.GetProperty("data");
+        if (data.GetArrayLength() == 0)
+        {
+            throw new TwitchApiException("Twitch не вернул данные канала.");
+        }
+
+        var channel = data[0];
+        return new TwitchChannel(
+            ReadString(channel, "title"),
+            ReadString(channel, "game_name"),
+            ReadString(channel, "game_id"));
     }
 
     public async Task UpdateTitleAsync(

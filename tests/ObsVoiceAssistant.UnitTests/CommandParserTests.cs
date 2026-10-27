@@ -42,23 +42,33 @@ public sealed class CommandParserTests
     }
 
     [Fact]
-    public void Parse_Title_ExtractsArgumentIgnoringPunctuation()
+    public void Parse_Title_KeepsCaseAndDropsTrailingPunctuation()
     {
+        // Регистр и «!» важны: тег нельзя восстановить из нижнего регистра.
         var result = parser.Parse("измени название стрима на Вечерний ranked.");
 
         Assert.NotNull(result);
         Assert.Equal(CommandIntent.SetStreamTitle, result.Intent);
-        Assert.Equal("вечерний ranked", result.Argument);
+        Assert.Equal("Вечерний ranked", result.Argument);
     }
 
     [Fact]
-    public void Parse_Category_ExtractsArgument()
+    public void Parse_Title_KeepsTags()
+    {
+        var result = parser.Parse("измени название стрима на Вечерний ranked !tg !exitlag.");
+
+        Assert.NotNull(result);
+        Assert.Equal("Вечерний ranked !tg !exitlag", result.Argument);
+    }
+
+    [Fact]
+    public void Parse_Category_KeepsCase()
     {
         var result = parser.Parse("измени категорию стрима на Just Chatting");
 
         Assert.NotNull(result);
         Assert.Equal(CommandIntent.SetStreamCategory, result.Intent);
-        Assert.Equal("just chatting", result.Argument);
+        Assert.Equal("Just Chatting", result.Argument);
     }
 
     [Theory]
@@ -118,6 +128,7 @@ public sealed class ConfirmationPolicyTests
     [InlineData(CommandIntent.ToggleInput)]
     [InlineData(CommandIntent.MuteAllAudio)]
     [InlineData(CommandIntent.AdjustInputVolume)]
+    [InlineData(CommandIntent.NextMusicTrack)]
     public void SafeCommands_DoNotRequireConfirmation(CommandIntent intent)
     {
         Assert.False(policy.RequiresConfirmation(intent));

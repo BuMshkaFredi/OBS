@@ -51,6 +51,25 @@ public sealed class TwitchApiClientTests
     }
 
     [Fact]
+    public async Task GetChannel_ReturnsTitleAndGame()
+    {
+        var handler = new StubHttpMessageHandler();
+        handler.EnqueueJson(HttpStatusCode.OK, ValidationJson);
+        handler.EnqueueJson(
+            HttpStatusCode.OK,
+            "{\"data\":[{\"title\":\"Вечерний !tg\",\"game_name\":\"Dota 2\",\"game_id\":\"game-1\"}]}");
+        using var http = new HttpClient(handler);
+        var api = CreateApi(http, CreateTokenStore());
+
+        var channel = await api.GetChannelAsync();
+
+        Assert.Equal("Вечерний !tg", channel.Title);
+        Assert.Equal("Dota 2", channel.GameName);
+        Assert.Equal("game-1", channel.GameId);
+        Assert.Contains("broadcaster_id=user-1", handler.Requests[1].Uri?.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UpdateTitle_SendsPatchWithBroadcasterIdAndTitle()
     {
         var handler = new StubHttpMessageHandler();

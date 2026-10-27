@@ -98,9 +98,9 @@ public sealed class VoiceCommandPipeline
 
         diagnostic?.Invoke($"Распознана команда: {command.Intent}");
 
-        // Категорию Twitch проверяем до подтверждения: пользователь должен увидеть
-        // точное название первого результата поиска, а dispatch уже получает game_id.
-        if (command.Intent == CommandIntent.SetStreamCategory)
+        // Название и категорию Twitch проверяем до подтверждения: пользователь должен
+        // увидеть итоговое название с тегами и точный результат поиска категории.
+        if (command.Intent is CommandIntent.SetStreamCategory or CommandIntent.SetStreamTitle)
         {
             try
             {
@@ -114,8 +114,10 @@ public sealed class VoiceCommandPipeline
             catch (Exception exception)
             {
                 diagnostic?.Invoke(
-                    $"Не удалось подготовить категорию Twitch: {exception.GetType().Name}: {exception.Message}");
-                notify?.Invoke($"Не удалось найти категорию на Twitch: {Truncate(exception.Message)}");
+                    $"Не удалось подготовить команду Twitch: {exception.GetType().Name}: {exception.Message}");
+                notify?.Invoke(command.Intent == CommandIntent.SetStreamCategory
+                    ? $"Не удалось найти категорию на Twitch: {Truncate(exception.Message)}"
+                    : $"Не удалось прочитать текущее название на Twitch: {Truncate(exception.Message)}");
                 return;
             }
         }
