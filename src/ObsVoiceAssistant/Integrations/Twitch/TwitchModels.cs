@@ -29,3 +29,6 @@ public sealed record TwitchCategory(string Id, string Name, string? BoxArtUrl);
 
 /// <summary>Текущие данные канала: название нужно для сохранения тегов.</summary>
 public sealed record TwitchChannel(string Title, string GameName, string GameId);
+
+/// <summary>Состояние трансляции для оверлея зрителей.</summary>
+public sealed record TwitchStreamStatus(bool IsLive, int Viewers);

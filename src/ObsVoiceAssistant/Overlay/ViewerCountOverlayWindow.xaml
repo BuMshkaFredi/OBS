@@ -1,0 +1,34 @@
+<Window x:Class="ObsVoiceAssistant.Overlay.ViewerCountOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Зрители"
+        SizeToContent="WidthAndHeight"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        Focusable="False"
+        WindowStartupLocation="Manual"
+        Opacity="{Binding Opacity}">
+    <Border Background="#D9101014"
+            CornerRadius="12"
+            Padding="16,8"
+            Margin="6"
+            Cursor="SizeAll"
+            MouseLeftButtonDown="OnDragAreaMouseLeftButtonDown">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{Binding CountText}"
+                       FontSize="32"
+                       FontWeight="SemiBold"
+                       Foreground="White" />
+            <TextBlock Text="{Binding LabelText}"
+                       FontSize="13"
+                       Foreground="#CCFFFFFF"
+                       VerticalAlignment="Bottom"
+                       Margin="6,0,0,5" />
+        </StackPanel>
+    </Border>
+</Window>

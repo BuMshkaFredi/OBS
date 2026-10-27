@@ -31,6 +31,21 @@ public sealed record AppSettings(
     /// с приложением и в PATH.
     /// </summary>
     public string? FfmpegPath { get; init; }
+
+    /// <summary>
+    /// Показывать окно со счётчиком зрителей. По умолчанию выключено:
+    /// окно поверх всех окон не должно появляться без решения пользователя.
+    /// </summary>
+    public bool ViewerOverlayEnabled { get; init; }
+
+    /// <summary>Интервал опроса Helix в секундах. Меньше 15 секунд не используется.</summary>
+    public int ViewerOverlayIntervalSeconds { get; init; } = 30;
+
+    /// <summary>Сохранённая позиция окна. <c>null</c> — правый верхний угол.</summary>
+    public double? ViewerOverlayLeft { get; init; }
+
+    /// <summary>Сохранённая позиция окна. <c>null</c> — правый верхний угол.</summary>
+    public double? ViewerOverlayTop { get; init; }
 }
 
 public sealed class SettingsService

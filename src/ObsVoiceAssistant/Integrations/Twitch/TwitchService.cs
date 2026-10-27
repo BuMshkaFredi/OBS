@@ -1,6 +1,7 @@
 using System.Net.Http;
 using ObsVoiceAssistant.Commands;
 using ObsVoiceAssistant.Configuration;
+using ObsVoiceAssistant.Overlay;
 using ObsVoiceAssistant.Security;
 
 namespace ObsVoiceAssistant.Integrations.Twitch;
@@ -17,6 +18,7 @@ public sealed class TwitchService : IDisposable
     private readonly TwitchOAuthClient oauth;
     private readonly TwitchApiClient api;
     private readonly HttpClient http;
+    private bool? connectionState;
 
     public TwitchService(
         SettingsService settings,
@@ -36,9 +38,15 @@ public sealed class TwitchService : IDisposable
             oauth,
             http);
         CommandPort = new TwitchCommandAdapter(api);
+        ViewerCountProvider = new TwitchViewerCountProvider(api);
     }
 
+    /// <summary>Смена состояния подключения: оверлей останавливает опрос при отключении.</summary>
+    public event Action<bool>? ConnectionChanged;
+
     public ITwitchCommandPort CommandPort { get; }
+
+    public IViewerCountProvider ViewerCountProvider { get; }
 
     public bool HasClientId => !string.IsNullOrWhiteSpace(settings.Load().TwitchClientId);
 
@@ -71,18 +79,33 @@ public sealed class TwitchService : IDisposable
         try
         {
             // Проверка через validate и /helix/users заодно проверяет scope.
-            return await api.GetCurrentUserAsync(cancellationToken).ConfigureAwait(false);
+            var user = await api.GetCurrentUserAsync(cancellationToken).ConfigureAwait(false);
+            SetConnectionState(true);
+            return user;
         }
         catch
         {
             tokenStore.Delete();
+            SetConnectionState(false);
             throw;
         }
     }
 
     public async Task<TwitchUser> CheckConnectionAsync(
-        CancellationToken cancellationToken = default) =>
-        await api.GetCurrentUserAsync(cancellationToken).ConfigureAwait(false);
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var user = await api.GetCurrentUserAsync(cancellationToken).ConfigureAwait(false);
+            SetConnectionState(true);
+            return user;
+        }
+        catch
+        {
+            SetConnectionState(false);
+            throw;
+        }
+    }
 
     /// <summary>
     /// Удаляет локальные токены. Отзыв на стороне Twitch — по возможности:
@@ -104,6 +127,7 @@ public sealed class TwitchService : IDisposable
         }
 
         tokenStore.Delete();
+        SetConnectionState(false);
 
         if (!revokeOnTwitch || tokens is null)
         {
@@ -130,6 +154,17 @@ public sealed class TwitchService : IDisposable
     }
 
     public void Dispose() => http.Dispose();
+
+    private void SetConnectionState(bool connected)
+    {
+        if (connectionState == connected)
+        {
+            return;
+        }
+
+        connectionState = connected;
+        ConnectionChanged?.Invoke(connected);
+    }
 
     private string RequireClientId()
     {

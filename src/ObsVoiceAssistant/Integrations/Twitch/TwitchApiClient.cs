@@ -17,6 +17,8 @@ public interface ITwitchApiClient
 
     Task<TwitchChannel> GetChannelAsync(CancellationToken cancellationToken = default);
 
+    Task<TwitchStreamStatus> GetStreamStatusAsync(CancellationToken cancellationToken = default);
+
     Task UpdateTitleAsync(string title, CancellationToken cancellationToken = default);
 
     Task UpdateCategoryAsync(string gameId, CancellationToken cancellationToken = default);
@@ -128,6 +130,33 @@ public sealed class TwitchApiClient : ITwitchApiClient
             ReadString(channel, "title"),
             ReadString(channel, "game_name"),
             ReadString(channel, "game_id"));
+    }
+
+    public async Task<TwitchStreamStatus> GetStreamStatusAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var auth = await EnsureAuthorizedAsync(cancellationToken).ConfigureAwait(false);
+        var url = $"{HelixBase}/streams?user_id={Uri.EscapeDataString(auth.UserId)}";
+        var body = await SendAuthorizedAsync(auth, HttpMethod.Get, url, body: null, cancellationToken)
+            .ConfigureAwait(false);
+
+        using var document = JsonDocument.Parse(body);
+        var data = document.RootElement.GetProperty("data");
+        if (data.GetArrayLength() == 0)
+        {
+            return new TwitchStreamStatus(IsLive: false, Viewers: 0);
+        }
+
+        var stream = data[0];
+        var viewers = stream.TryGetProperty("viewer_count", out var count) &&
+                      count.ValueKind == JsonValueKind.Number &&
+                      count.TryGetInt32(out var value)
+            ? value
+            : 0;
+
+        return new TwitchStreamStatus(
+            string.Equals(ReadString(stream, "type"), "live", StringComparison.OrdinalIgnoreCase),
+            viewers);
     }
 
     public async Task UpdateTitleAsync(

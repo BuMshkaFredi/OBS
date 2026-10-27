@@ -10,6 +10,7 @@ using ObsVoiceAssistant.Integrations.Media;
 using ObsVoiceAssistant.Integrations.Obs;
 using ObsVoiceAssistant.Integrations.Twitch;
 using ObsVoiceAssistant.Notifications;
+using ObsVoiceAssistant.Overlay;
 using ObsVoiceAssistant.Recordings;
 using ObsVoiceAssistant.Speech;
 using ObsVoiceAssistant.Tray;
@@ -35,6 +36,10 @@ public partial class App : System.Windows.Application
     private VoiceCommandPipeline? voiceCommandPipeline;
     private ISpeechRecognizer? speechRecognizer;
     private RecordingNamingService? recordingNaming;
+    private ViewerCountOverlayViewModel? viewerCountViewModel;
+    private ViewerCountOverlayWindow? viewerCountWindow;
+    private ViewerCountPollingService? viewerCountPolling;
+    private bool viewerOverlayEnabled;
     private SingleInstanceGuard? singleInstance;
     private bool? lastObsConnectionState;
     private readonly AssistantLogger logger = new();
@@ -60,8 +65,9 @@ public partial class App : System.Windows.Application
 
         settingsService = new SettingsService();
         twitchService = new TwitchService(settingsService);
-        trayIcon = new TrayIconService(ShowObsSettings, Shutdown);
+        trayIcon = new TrayIconService(ShowObsSettings, Shutdown, SetViewerOverlayEnabled);
         notifications = new NotificationPanelService();
+        InitializeViewerOverlay();
         speechRecognizer = CreateSpeechRecognizer();
         StartObsConnection();
         logger.Info($"Доступно устройств записи: {WaveInEvent.DeviceCount}");
@@ -147,6 +153,13 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (twitchService is not null)
+        {
+            twitchService.ConnectionChanged -= OnTwitchConnectionChanged;
+        }
+
+        viewerCountPolling?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        viewerCountWindow?.Close();
         orchestrator?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         capsLockHook?.Dispose();
         wakeWordListening?.DisposeAsync().AsTask().GetAwaiter().GetResult();
@@ -194,7 +207,137 @@ public partial class App : System.Windows.Application
         if (window.ShowDialog() == true)
         {
             RestartObsConnection();
+
+            // Настройки оверлея применяются без перезапуска приложения.
+            var settings = settingsService.Load();
+            viewerOverlayEnabled = settings.ViewerOverlayEnabled;
+            trayIcon?.SetOverlayEnabled(viewerOverlayEnabled);
+            ApplyViewerOverlayState();
         }
+    }
+
+    /// <summary>
+    /// Создаёт окно и службу опроса один раз. Окно показывается только по данным
+    /// о живой трансляции, поэтому при запуске без Twitch оно остаётся скрытым.
+    /// </summary>
+    private void InitializeViewerOverlay()
+    {
+        if (settingsService is null || twitchService is null || trayIcon is null)
+        {
+            return;
+        }
+
+        var settings = settingsService.Load();
+        viewerCountViewModel = new ViewerCountOverlayViewModel();
+        viewerCountWindow = new ViewerCountOverlayWindow(
+            viewerCountViewModel,
+            settings.ViewerOverlayLeft,
+            settings.ViewerOverlayTop,
+            SaveViewerOverlayPosition);
+        viewerCountPolling = new ViewerCountPollingService(
+            twitchService.ViewerCountProvider,
+            () => TimeSpan.FromSeconds(
+                Math.Max(15, settingsService.Load().ViewerOverlayIntervalSeconds)),
+            message => logger.Info(message));
+
+        viewerCountPolling.Updated += OnViewerCountUpdated;
+        twitchService.ConnectionChanged += OnTwitchConnectionChanged;
+        viewerOverlayEnabled = settings.ViewerOverlayEnabled;
+        trayIcon.SetOverlayEnabled(viewerOverlayEnabled);
+        ApplyViewerOverlayState();
+    }
+
+    private void SetViewerOverlayEnabled(bool enabled)
+    {
+        if (settingsService is null)
+        {
+            return;
+        }
+
+        viewerOverlayEnabled = enabled;
+        settingsService.Save(settingsService.Load() with { ViewerOverlayEnabled = enabled });
+        ApplyViewerOverlayState();
+    }
+
+    /// <summary>
+    /// Включает или приостанавливает опрос. Пока нет сохранённого токена Twitch,
+    /// сетевые запросы не выполняются: окно ждёт подключения.
+    /// </summary>
+    private void ApplyViewerOverlayState()
+    {
+        if (settingsService is null || twitchService is null)
+        {
+            return;
+        }
+
+        if (!viewerOverlayEnabled || !twitchService.HasSavedTokens)
+        {
+            viewerCountPolling?.Pause();
+            viewerCountViewModel?.Apply(ViewerCountResult.NotConnected);
+            UpdateViewerOverlayVisibility();
+            return;
+        }
+
+        viewerCountPolling?.Start();
+        viewerCountPolling?.Resume();
+        UpdateViewerOverlayVisibility();
+    }
+
+    private void OnViewerCountUpdated(ViewerCountResult result)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            viewerCountViewModel?.Apply(result);
+            UpdateViewerOverlayVisibility();
+        });
+    }
+
+    private void OnTwitchConnectionChanged(bool connected)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (!connected)
+            {
+                viewerCountPolling?.Pause();
+                viewerCountViewModel?.Apply(ViewerCountResult.NotConnected);
+                UpdateViewerOverlayVisibility();
+                return;
+            }
+
+            ApplyViewerOverlayState();
+        });
+    }
+
+    private void UpdateViewerOverlayVisibility()
+    {
+        if (viewerCountWindow is null || viewerCountViewModel is null)
+        {
+            return;
+        }
+
+        if (viewerOverlayEnabled && viewerCountViewModel.IsVisible)
+        {
+            if (!viewerCountWindow.IsVisible)
+            {
+                viewerCountWindow.Show();
+            }
+
+            return;
+        }
+
+        if (viewerCountWindow.IsVisible)
+        {
+            viewerCountWindow.Hide();
+        }
+    }
+
+    private void SaveViewerOverlayPosition(double left, double top)
+    {
+        settingsService?.Save(settingsService.Load() with
+        {
+            ViewerOverlayLeft = left,
+            ViewerOverlayTop = top
+        });
     }
 
     /// <summary>

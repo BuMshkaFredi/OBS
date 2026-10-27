@@ -115,6 +115,57 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
+    public void SaveAndLoad_PersistsViewerOverlaySettings()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var service = new SettingsService(directory);
+            service.Save(new AppSettings
+            {
+                ViewerOverlayEnabled = true,
+                ViewerOverlayIntervalSeconds = 45,
+                ViewerOverlayLeft = 100.5,
+                ViewerOverlayTop = 30.25
+            });
+
+            var loaded = service.Load();
+
+            Assert.True(loaded.ViewerOverlayEnabled);
+            Assert.Equal(45, loaded.ViewerOverlayIntervalSeconds);
+            Assert.Equal(100.5, loaded.ViewerOverlayLeft);
+            Assert.Equal(30.25, loaded.ViewerOverlayTop);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_WithoutOverlaySettings_UsesDisabledOverlayAndThirtySeconds()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(directory, "settings.json"),
+                """{ "ObsUrl": "ws://127.0.0.1:4455" }""");
+
+            var loaded = new SettingsService(directory).Load();
+
+            Assert.False(loaded.ViewerOverlayEnabled);
+            Assert.Equal(30, loaded.ViewerOverlayIntervalSeconds);
+            Assert.Null(loaded.ViewerOverlayLeft);
+            Assert.Null(loaded.ViewerOverlayTop);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void SaveAndLoadObsPassword_UsesProtectedStorageNotSettingsJson()
     {
         var directory = CreateTempDirectory();

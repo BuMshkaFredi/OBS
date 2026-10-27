@@ -11,17 +11,27 @@ public sealed class TrayIconService : ITrayStatus, IDisposable
     private readonly Forms.NotifyIcon icon;
     private readonly Icon appIcon;
     private readonly Forms.ToolStripMenuItem statusItem;
+    private readonly Forms.ToolStripMenuItem overlayItem;
     private readonly Action configureAction;
     private readonly Action exitAction;
+    private readonly Action<bool>? overlayAction;
 
-    public TrayIconService(Action configureAction, Action exitAction)
+    public TrayIconService(
+        Action configureAction,
+        Action exitAction,
+        Action<bool>? overlayAction = null)
     {
         this.configureAction = configureAction;
         this.exitAction = exitAction;
+        this.overlayAction = overlayAction;
         statusItem = new Forms.ToolStripMenuItem("OBS: подключение...") { Enabled = false };
+        overlayItem = new Forms.ToolStripMenuItem("Счётчик зрителей") { CheckOnClick = true };
+        overlayItem.Click += (_, _) => this.overlayAction?.Invoke(overlayItem.Checked);
+
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add(statusItem);
         menu.Items.Add("Настройки", null, (_, _) => this.configureAction());
+        menu.Items.Add(overlayItem);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Выход", null, (_, _) => this.exitAction());
 
@@ -54,6 +64,9 @@ public sealed class TrayIconService : ITrayStatus, IDisposable
         statusItem.Text = $"OBS: {status}";
         icon.Text = $"{Title} — {status}";
     });
+
+    /// <summary>Синхронизирует галочку с настройкой после окна настроек или запуска.</summary>
+    public void SetOverlayEnabled(bool enabled) => OnUi(() => overlayItem.Checked = enabled);
 
     /// <summary>Запись в трей приходит из фоновых потоков, а WinForms требует UI-поток.</summary>
     private void OnUi(Action action)

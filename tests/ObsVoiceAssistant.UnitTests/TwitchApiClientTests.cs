@@ -70,6 +70,39 @@ public sealed class TwitchApiClientTests
     }
 
     [Fact]
+    public async Task GetStreamStatus_ReturnsLiveViewerCount()
+    {
+        var handler = new StubHttpMessageHandler();
+        handler.EnqueueJson(HttpStatusCode.OK, ValidationJson);
+        handler.EnqueueJson(
+            HttpStatusCode.OK,
+            "{\"data\":[{\"type\":\"live\",\"viewer_count\":1234}]}");
+        using var http = new HttpClient(handler);
+        var api = CreateApi(http, CreateTokenStore());
+
+        var status = await api.GetStreamStatusAsync();
+
+        Assert.True(status.IsLive);
+        Assert.Equal(1234, status.Viewers);
+        Assert.Contains("user_id=user-1", handler.Requests[1].Uri?.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetStreamStatus_EmptyDataMeansOffline()
+    {
+        var handler = new StubHttpMessageHandler();
+        handler.EnqueueJson(HttpStatusCode.OK, ValidationJson);
+        handler.EnqueueJson(HttpStatusCode.OK, "{\"data\":[]}");
+        using var http = new HttpClient(handler);
+        var api = CreateApi(http, CreateTokenStore());
+
+        var status = await api.GetStreamStatusAsync();
+
+        Assert.False(status.IsLive);
+        Assert.Equal(0, status.Viewers);
+    }
+
+    [Fact]
     public async Task UpdateTitle_SendsPatchWithBroadcasterIdAndTitle()
     {
         var handler = new StubHttpMessageHandler();

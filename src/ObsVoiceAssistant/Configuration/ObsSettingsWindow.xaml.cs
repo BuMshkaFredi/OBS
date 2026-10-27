@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using MediaBrushes = System.Windows.Media.Brushes;
@@ -32,6 +33,9 @@ public partial class ObsSettingsWindow : Window
         TwitchClientIdBox.Text = settings.TwitchClientId ?? string.Empty;
         CreateMp4CopyCheckBox.IsChecked = settings.CreateMp4Copy;
         FfmpegPathBox.Text = settings.FfmpegPath ?? string.Empty;
+        ViewerOverlayCheckBox.IsChecked = settings.ViewerOverlayEnabled;
+        ViewerOverlayIntervalBox.Text = settings.ViewerOverlayIntervalSeconds
+            .ToString(CultureInfo.InvariantCulture);
 
         // Каждое поле получает свой список: один и тот же источник можно указать
         // в нескольких ролях, например звук рабочего стола — и как музыку стрима,
@@ -215,6 +219,18 @@ public partial class ObsSettingsWindow : Window
             return;
         }
 
+        if (!int.TryParse(
+                ViewerOverlayIntervalBox.Text.Trim(),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var overlayInterval) ||
+            overlayInterval is < 15 or > 3600)
+        {
+            StatusText.Foreground = MediaBrushes.Firebrick;
+            StatusText.Text = "Интервал оверлея: целое число секунд от 15 до 3600.";
+            return;
+        }
+
         var clientId = TwitchClientIdBox.Text.Trim();
         var savedClientId = settingsService.Load().TwitchClientId;
         if (!string.Equals(savedClientId, clientId, StringComparison.Ordinal))
@@ -230,6 +246,8 @@ public partial class ObsSettingsWindow : Window
             TwitchClientId = string.IsNullOrWhiteSpace(clientId) ? null : clientId,
             CreateMp4Copy = CreateMp4CopyCheckBox.IsChecked == true,
             FfmpegPath = string.IsNullOrWhiteSpace(FfmpegPathBox.Text) ? null : FfmpegPathBox.Text.Trim(),
+            ViewerOverlayEnabled = ViewerOverlayCheckBox.IsChecked == true,
+            ViewerOverlayIntervalSeconds = overlayInterval,
             AudioInputs = new ObsAudioInputs(
                 Microphone: ObsInputSelection.ToInputName(MicrophoneBox.Text),
                 Browser: ObsInputSelection.ToInputName(BrowserBox.Text),

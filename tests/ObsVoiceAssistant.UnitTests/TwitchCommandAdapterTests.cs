@@ -184,6 +184,9 @@ public sealed class TwitchCommandAdapterTests
                 ? Task.FromResult(Channel)
                 : Task.FromException<TwitchChannel>(ChannelFailure);
 
+        public Task<TwitchStreamStatus> GetStreamStatusAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TwitchStreamStatus(IsLive: false, Viewers: 0));
+
         public Task<TwitchCategory?> FindFirstCategoryAsync(
             string query,
             CancellationToken cancellationToken = default)
