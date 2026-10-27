@@ -16,6 +16,8 @@ internal sealed class MailPolicy
 
     public MailLimits Limits { get; init; } = new();
 
+    public ReleaseMailPolicy Release { get; init; } = new();
+
     public static MailPolicy Load(string path)
     {
         if (!File.Exists(path))
@@ -109,6 +111,27 @@ internal sealed class MailPolicy
         return null;
     }
 
+    /// <summary>
+    /// Проверяет только формат allowlist. Пустой список означает, что письма
+    /// о сборке отключены; это не ошибка для канала вопросов.
+    /// </summary>
+    public string? ValidateReleaseConfiguration()
+    {
+        foreach (var prefix in Release.AllowedUrlPrefixes)
+        {
+            if (!Uri.TryCreate(prefix, UriKind.Absolute, out var uri) ||
+                uri.Scheme != Uri.UriSchemeHttps ||
+                uri.UserInfo.Length > 0 ||
+                uri.Query.Length > 0 ||
+                uri.Fragment.Length > 0)
+            {
+                return $"release.allowedUrlPrefixes: '{prefix}' должен быть HTTPS-адресом без query, fragment и учётных данных.";
+            }
+        }
+
+        return null;
+    }
+
     public static string ComputeAddressHash(string address) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(address.Trim().ToLowerInvariant()))).ToLowerInvariant();
 }
@@ -142,6 +165,15 @@ internal sealed class MailEndpoint
 
         return MailKit.Security.SecureSocketOptions.SslOnConnect;
     }
+}
+
+internal sealed class ReleaseMailPolicy
+{
+    /// <summary>
+    /// Префиксы HTTPS-ссылок, которые разрешено вставлять в письмо о сборке.
+    /// Свободный текст письма по-прежнему проверяется ContentGuard и ссылок не содержит.
+    /// </summary>
+    public List<string> AllowedUrlPrefixes { get; init; } = [];
 }
 
 internal sealed class MailLimits

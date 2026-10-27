@@ -16,5 +16,11 @@
     "maxQuestionsPerBatch": 12,
     "maxQuestionCharacters": 350,
     "maxBodyCharacters": 7000
+  },
+  "release": {
+    "allowedUrlPrefixes": [
+      "https://github.com/your-account/your-repo/releases/tag/",
+      "https://github.com/your-account/your-repo/releases/download/"
+    ]
   }
 }

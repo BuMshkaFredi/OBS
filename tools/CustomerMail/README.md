@@ -1,19 +1,21 @@
 # CustomerMail
 
-Mail-channel utility: it sends the customer only questions about implementation preferences
-and fetches their replies. It is not part of the application itself and is not included in the
-installer or publish output.
+Mail-channel utility: it sends the customer questions about implementation preferences and letters
+about a published build, and fetches their replies. It is not part of the application itself and is
+not included in the installer or publish output.
 
 ## Guarantees built into the code
 
 - A single recipient: `policy.json` → `customerAddress`, and it must match the PIN hash in
   `AddressPin.CustomerAddressSha256`. There is no “to” parameter.
-- No email is sent without `status: approved` in the batch file; free-form text never goes into
-  the email.
+- No email is sent without `status: approved` in the batch or release file; free-form text never goes
+  into the email.
 - The code has no attachments, `CC`, `BCC`, HTML, or multiple recipients.
 - The content filter (`ContentGuard.cs`) forbids links, email addresses, file paths, IPs, code,
   GUIDs, long tokens, words about passwords/tokens/secrets, and mentions of project internals.
-- A daily email limit and one send per batch.
+- A release letter may use only URLs that match `release.allowedUrlPrefixes` from `policy.json`, and
+  only in the dedicated `releaseUrl` and `downloadUrl` fields.
+- A daily email limit, one send per batch, and one send per release letter.
 - The log `docs/customer-questions/audit/mail-log.jsonl` is written append-only.
 - Only the pinned address is accepted; other people's emails are neither read nor marked as read.
 
@@ -29,6 +31,12 @@ dotnet run --project tools/CustomerMail -- send --batch CQ-001 --preview
 # Send after user permission
 dotnet run --project tools/CustomerMail -- send --batch CQ-001
 
+# Show a release letter without sending anything
+dotnet run --project tools/CustomerMail -- send-release --batch REL-001 --preview
+
+# Send a release letter after user permission
+dotnet run --project tools/CustomerMail -- send-release --batch REL-001
+
 # Fetch new customer replies
 dotnet run --project tools/CustomerMail -- fetch --limit 20
 
@@ -37,6 +45,24 @@ dotnet run --project tools/CustomerMail -- pin-hash zakazchik@example.com
 ```
 
 Exit codes: `0` — success, `1` — error, `2` — action rejected by the checks.
+
+## Release letter schema
+
+`docs/customer-questions/releases/REL-001.json`:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | `REL-XXX`; must match the file name |
+| `status` | `draft` or `approved`; sending requires `approved` |
+| `approvedAt` | Required when `status` is `approved` |
+| `subject` | One line, 10–140 characters, checked by `ContentGuard` |
+| `releaseUrl`, `downloadUrl` | HTTPS links inside `release.allowedUrlPrefixes` |
+| `archiveSha256` | 64 hex characters; printed in the letter |
+| `intro`, `closing` | Lists of plain-text paragraphs |
+| `sections` | List of `title` plus `paragraphs`, `bullets`, and `steps` |
+
+Unknown JSON fields are rejected. Links in free text are still forbidden.
+
 
 ## One-time setup
 
@@ -98,7 +124,8 @@ Check: `dotnet run --project tools/CustomerMail -- check`.
 | `PIN адреса не настроен` (address PIN is not configured) | Empty `AddressPin.CustomerAddressSha256`, see step 3 |
 | `Не задана переменная окружения OBS_VA_MAIL_USER` (environment variable is not set) | The variables are not set or the terminal was not restarted |
 | `Адрес в policy.json не совпадает с закреплённым PIN` (address does not match the pinned PIN) | The address was changed without recomputing the hash |
-| `Отклонено: ... запрещённый фрагмент` (rejected: forbidden fragment) | The question contains a link, path, email, token, or code — rephrase the question |
+| `Отклонено: ... запрещённый фрагмент` (rejected: forbidden fragment) | The question or release text contains a link, path, email, token, or code — rephrase it |
 | `Отклонено: исчерпан лимит` (rejected: limit exhausted) | The daily email limit in `policy.json` |
-| `Отклонено: партия уже была отправлена` (rejected: batch was already sent) | Idempotency: one send per batch |
+| `Отклонено: ... уже было отправлено` (rejected: already sent) | Idempotency: one send per batch or release letter |
+| `release.allowedUrlPrefixes` in a rejection | The release link host or path is not in the allowlist, uses HTTP, or contains a query or fragment |
 | `SSL/TLS handshake` or `server has unexpectedly disconnected` on 465/587 | The network or provider cuts outgoing SMTP on these ports. For Gmail, a working workaround is `port: 25` + `security: starttls`: port 25 offers STARTTLS and AUTH. Verified by changing `smtp` in `policy.json` |

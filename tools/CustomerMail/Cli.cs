@@ -26,6 +26,7 @@ internal static class Cli
             {
                 "check" => Check(),
                 "send" => await SendAsync(options).ConfigureAwait(false),
+                "send-release" => await SendReleaseAsync(options).ConfigureAwait(false),
                 "fetch" => await FetchAsync(options).ConfigureAwait(false),
                 "pin-hash" => PinHash(options),
                 _ => Unknown(command),
@@ -157,6 +158,88 @@ internal static class Cli
             return ExitRejected;
         }
 
+        return await DeliverAsync(root, policy, batchId, "questions", email, batch!.Questions.Count, preview)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<int> SendReleaseAsync(CommandOptions options)
+    {
+        var root = RepoLayout.FindRoot();
+        var mailId = options.Get("batch");
+        if (string.IsNullOrWhiteSpace(mailId))
+        {
+            Console.Error.WriteLine("Не указан обязательный параметр --batch <REL-001>.");
+            return ExitRejected;
+        }
+
+        var preview = options.Has("preview");
+        var policy = MailPolicy.Load(RepoLayout.PolicyPath(root));
+
+        var endpointError = policy.ValidateEndpoints();
+        if (endpointError is not null)
+        {
+            Console.Error.WriteLine($"Проблема: {endpointError}");
+            return ExitRejected;
+        }
+
+        var recipientError = policy.ValidateRecipient(AddressPin.CustomerAddressSha256);
+        if (recipientError is not null)
+        {
+            Console.Error.WriteLine($"Проблема: {recipientError}");
+            return ExitRejected;
+        }
+
+        if (policy.Release.AllowedUrlPrefixes.Count == 0)
+        {
+            Console.Error.WriteLine("Проблема: release.allowedUrlPrefixes в policy.json пуст, письма о сборке отключены.");
+            return ExitRejected;
+        }
+
+        var configurationError = policy.ValidateReleaseConfiguration();
+        if (configurationError is not null)
+        {
+            Console.Error.WriteLine($"Проблема: {configurationError}");
+            return ExitRejected;
+        }
+
+        var mailPath = Path.Combine(RepoLayout.ReleasesDirectory(root), mailId + ".json");
+        var mail = ReleaseMail.TryLoad(mailPath, out var loadError);
+        if (loadError is not null)
+        {
+            Console.Error.WriteLine(loadError);
+            return ExitRejected;
+        }
+
+        var validation = ReleaseMailValidator.Validate(mail, mailId, policy, requireApproved: !preview);
+        if (!validation.IsValid)
+        {
+            foreach (var error in validation.Errors)
+            {
+                Console.Error.WriteLine($"Отклонено: {error}");
+            }
+
+            return ExitRejected;
+        }
+
+        var email = ReleaseMailComposer.Compose(mail!);
+        return await DeliverAsync(root, policy, mailId, "release", email, mail!.Sections.Count, preview)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Общая доставка: показ письма, защита от повторной отправки, суточный лимит,
+    /// проверка отправителя, отправка и запись в аудит. Проверки конкретного вида
+    /// письма выполняются до вызова этого метода.
+    /// </summary>
+    private static async Task<int> DeliverAsync(
+        string root,
+        MailPolicy policy,
+        string deliveryId,
+        string kind,
+        ComposedEmail email,
+        int itemCount,
+        bool preview)
+    {
         Console.WriteLine($"Кому: {Mask(policy.CustomerAddress)}");
         Console.WriteLine($"Тема: {email.Subject}");
         Console.WriteLine();
@@ -168,9 +251,9 @@ internal static class Cli
             return ExitOk;
         }
 
-        if (AuditLog.WasSent(root, batchId))
+        if (AuditLog.WasSent(root, deliveryId))
         {
-            Console.Error.WriteLine($"Отклонено: партия {batchId} уже была отправлена.");
+            Console.Error.WriteLine($"Отклонено: {deliveryId} уже было отправлено.");
             return ExitRejected;
         }
 
@@ -200,11 +283,12 @@ internal static class Cli
             {
                 TimestampUtc = DateTimeOffset.UtcNow,
                 Action = "send",
-                BatchId = batchId,
+                BatchId = deliveryId,
+                Kind = kind,
                 Recipient = policy.CustomerAddress,
                 Subject = email.Subject,
                 BodySha256 = Hash(email.Body),
-                QuestionCount = batch!.Questions.Count,
+                QuestionCount = itemCount,
                 Result = "failed",
                 MessageId = null,
             });
@@ -216,16 +300,17 @@ internal static class Cli
         {
             TimestampUtc = DateTimeOffset.UtcNow,
             Action = "send",
-            BatchId = batchId,
+            BatchId = deliveryId,
+            Kind = kind,
             Recipient = policy.CustomerAddress,
             Subject = email.Subject,
             BodySha256 = Hash(email.Body),
-            QuestionCount = batch!.Questions.Count,
+            QuestionCount = itemCount,
             Result = "sent",
             MessageId = messageId,
         });
 
-        Console.WriteLine($"Отправлено: {batchId} -> {Mask(policy.CustomerAddress)}");
+        Console.WriteLine($"Отправлено: {deliveryId} -> {Mask(policy.CustomerAddress)}");
         return ExitOk;
     }
 
@@ -299,6 +384,8 @@ internal static class Cli
               check                          проверить policy.json, PIN адреса и переменные окружения
               send --batch CQ-001            отправить партию вопросов (нужен status=approved)
               send --batch CQ-001 --preview  показать письмо, ничего не отправляя
+              send-release --batch REL-001   отправить письмо о сборке (нужен status=approved)
+              send-release --batch REL-001 --preview  показать письмо о сборке без отправки
               fetch [--limit 20]             забрать новые ответы только от адреса заказчика
               pin-hash <email>               посчитать SHA-256 адреса для AddressPin
 

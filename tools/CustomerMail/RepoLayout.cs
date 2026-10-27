@@ -27,6 +27,8 @@ internal static class RepoLayout
 
     public static string BatchesDirectory(string root) => Path.Combine(CustomerQuestions(root), "batches");
 
+    public static string ReleasesDirectory(string root) => Path.Combine(CustomerQuestions(root), "releases");
+
     public static string AnswersDirectory(string root) => Path.Combine(CustomerQuestions(root), "answers");
 
     public static string AuditDirectory(string root) => Path.Combine(CustomerQuestions(root), "audit");

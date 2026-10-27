@@ -10,6 +10,14 @@ requirements, code, or configuration.
 | --- | --- | --- | --- | --- | --- |
 | CQ-001 | OBS behavior | closed | 2026-10-20 | 2026-10-20 | accepted: items 1–3; item 4 postponed |
 
+## Release letters
+
+Statuses: `draft` — draft, `approved` — allowed to send, `sent` — sent, `rejected` — withdrawn.
+
+| Letter | Build | Status | Sent | Subject |
+| --- | --- | --- | --- | --- |
+| REL-001 | 0.1.0 MVP | sent | 2026-10-27 | OBS Voice Assistant — сборка 0.1.0 для проверки |
+
 ## Unscheduled wishes
 
 Wishes that the customer added on their own, outside the question list. Each is recorded as a

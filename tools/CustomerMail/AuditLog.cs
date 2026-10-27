@@ -11,6 +11,9 @@ internal sealed class AuditEntry
 
     public string BatchId { get; init; } = string.Empty;
 
+    /// <summary>questions для партии вопросов, release для письма о сборке.</summary>
+    public string Kind { get; init; } = string.Empty;
+
     public string Recipient { get; init; } = string.Empty;
 
     public string Subject { get; init; } = string.Empty;
