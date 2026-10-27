@@ -107,7 +107,8 @@ The native libraries `libvosk.dll` and its dependencies are supplied by the `Vos
 - Personal music works like the microphone: `выключи музыку`, `выключи мою музыку`,
   `включи личную музыку` toggle the `PersonalMusic` source. The word in the command does not predict
   the result, so the notification shows the actual state: `Личная музыка выключена` /
-  `Личная музыка включена`.
+  `Личная музыка включена`. When the source actually becomes muted, the application also pauses the
+  Yandex Music desktop app; see [Yandex Music](#yandex-music).
 - Stream music works like the browser: `выключи музыку стрима`, `включи звук стрима` are explicit
   mute/unmute of the `StreamMusic` source. The key word is “стрим”: without “музыки” or “звука”,
   `выключи стрим` remains stopping the broadcast, and `выключи музыку` refers to personal music.
@@ -154,6 +155,30 @@ command `минус 10` gives 0%. There are no absolute values (`громкос�
 arbitrary sources by name: the target is one of the four roles, and “музыка” without a qualifier
 means personal music. The command requires no confirmation, and the notification shows the actual
 value: `Громкость микрофона 60%`.
+
+## Yandex Music
+
+The Yandex Music desktop app is controlled through Windows Media Control
+(`GlobalSystemMediaTransportControlsSessionManager`), in the `Integrations/Media` module. The
+application does not use global media keys and does not control the browser version of Yandex Music.
+
+- The session is selected by the application ID containing `yandex` or `яндекс`, not by the
+  “currently active” session: during a game the active session may belong to another player. If
+  several Yandex sessions exist, a playing session is preferred over a paused one.
+- `выключи музыку`, `выключи мою музыку`, and `включи личную музыку` toggle the `PersonalMusic` OBS
+  source. The player is paused only when the source actually became muted; when the source is
+  unmuted, playback is not resumed, so the user decides when to continue.
+- The notification contains both results: `Личная музыка выключена. Яндекс Музыка на паузе`,
+  `Личная музыка выключена. Плеер Яндекс Музыки не найден: пауза не выполнена`, or the source state
+  followed by the WinRT error.
+- `следующий трек`, `следующая песня`, `переключи трек`, `переключить трек`, `смени трек`,
+  `сменить трек` switch to the next track without touching OBS sources and without confirmation. The
+  result is `Трек переключён в Яндекс Музыке`, `Плеер Яндекс Музыки не найден: трек не переключён`,
+  or a safe error message.
+- If the player is closed or does not publish a media session, the OBS part is still executed; the
+  missing session is reported in the same notification and is not treated as a command failure.
+- WinRT calls are marshalled to the WPF UI thread, because the media session manager expects a
+  thread with a window loop; recognition itself runs in the background.
 
 ## How to add a new phrasing
 
@@ -291,8 +316,9 @@ Dangerous commands (`начни стрим`, `останови запись`, `�
 category) show a Windows Toast with two actions: `Подтвердить` and `Отмена`. The command is sent to
 OBS/Twitch only after `Подтвердить`; closing the notification, an error, or `Отмена` results in a
 refusal. For a category, a Twitch search is performed before the notification is shown; the
-confirmation text shows the exact name of the first result. The title and category receive a separate
-informational notification after a successful change. Twitch setup is described in
+confirmation text shows the exact name of the first result. For a title, the confirmation text
+already contains the final title with the preserved `!` tags. The title and category receive a
+separate informational notification after a successful change. Twitch setup is described in
 [`integrations/twitch.md`](integrations/twitch.md).
 
 Separately from confirmations, there are informational notifications. They are needed where the

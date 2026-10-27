@@ -140,9 +140,9 @@ The stack below is the agreed target stack. If a specific version has not yet be
 - Both modes use a single `ISpeechRecognizer` instance; Vosk calls are serialized because the engine is not designed for parallel recognition.
 - Before creating a new abstraction, reuse the existing contracts in the corresponding module.
 - A connection error with OBS/Twitch must be handled by a retry/reconnect service, not by infinite loops in the UI.
-- Yandex Music control lives in `Integrations/Media` behind `IMediaPlaybackControl`; the dispatcher never calls WinRT directly, and a missing media session must not cancel the OBS action.
-- The viewer count lives in `Overlay` and is read through `IViewerCountProvider`; the overlay window never calls Twitch directly, polling stops when Twitch is disconnected or the overlay is disabled, and network errors do not produce toast spam.
-- Twitch title composition is deterministic and happens before confirmation: `!` tags are preserved, duplicates are removed, the final title is shown to the user, and a result over 140 characters is rejected without an external call.
+- Yandex Music control lives in `Integrations/Media` behind `IMediaPlaybackControl`; the dispatcher never calls WinRT directly, and a missing media session must not cancel the OBS action. The player session is selected by an `AppId` containing `yandex` or `яндекс`, preferring a playing session; the next-track intent is `NextMusicTrack` with the phrases «следующий трек», «следующая песня», «переключи трек», «переключить трек», «смени трек», «сменить трек».
+- The viewer count lives in `Overlay` and is read through `IViewerCountProvider`; the overlay window never calls Twitch directly, polling stops when Twitch is disconnected or the overlay is disabled, and network errors do not produce toast spam. The overlay is disabled by default, is toggled by the «Счётчик зрителей» tray item or the settings window, polls every 30 seconds by default (minimum 15), hides while offline, and keeps the last value dimmed to 45% on a network error.
+- Twitch title composition is deterministic and happens before confirmation: `!` tags are preserved, duplicates are removed, the final title is shown to the user, and a result over 140 characters is rejected without an external call. Only trailing punctuation is removed from the user's title; the rest of the text and its case are kept as spoken.
 
 ### Confirmation Policy
 

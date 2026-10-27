@@ -5,7 +5,7 @@ A convenient filter:
 
 ```powershell
 Get-Content "$env:LOCALAPPDATA\ObsVoiceAssistant\assistant.log" -Encoding UTF8 |
-  Select-String 'Движок распознавания|Модель распознавания|Непрерывное прослушивание запущено|OBS подключена|OBS недоступна|Запись без речи|Vosk распознал|Vosk не распознал сегмент|Исправлено распознавание|Распознавание заняло|Распознана команда|Команда не распознана|Речь была, но текст не распознан|Требуется подтверждение|Команда отклонена|Команда отправлена|Ошибка' |
+  Select-String 'Движок распознавания|Модель распознавания|Непрерывное прослушивание запущено|OBS подключена|OBS недоступна|Запись без речи|Vosk распознал|Vosk не распознал сегмент|Исправлено распознавание|Распознавание заняло|Распознана команда|Команда не распознана|Речь была, но текст не распознан|Требуется подтверждение|Команда отклонена|Команда отправлена|Оверлей зрителей|Ошибка' |
   Select-Object -Last 60
 ```
 
@@ -53,8 +53,33 @@ is created by ffmpeg without re-encoding (`-c copy`), so quality and sound do no
   Check it before pressing `Подтвердить` (Confirm).
 - After a successful update, the notification shows the new title or category. Helix errors are
   shown as a safe message; tokens are never included in diagnostics.
+- `Не удалось прочитать текущее название на Twitch` — the current title could not be read, so the
+  command is rejected and the title does not change. Check the Twitch connection and repeat.
+- When the old title contains `!tg` and `!exitlag`, the confirmation already shows the final title
+  with these tags. Tags are words starting with `!`; tags without `!` are not preserved. If the
+  result together with the tags is longer than 140 characters, the command is rejected and no
+  external call is made. Only trailing punctuation is removed from the spoken title.
 
 Connection and session recovery details: [`integrations/twitch.md`](integrations/twitch.md).
+
+## Viewer overlay
+
+The overlay is disabled by default. Enable it with the `Счётчик зрителей` item in the tray menu or
+with the checkbox in the settings window; the change is applied without restarting the application.
+
+- The window is shown only when Twitch reports a live broadcast. When the broadcast stops or Twitch
+  is disconnected, the window hides; it does not show `0` as a fact.
+- The viewer count is read from Helix `GET /streams` every 30 seconds by default. The interval can be
+  changed in the settings window within 15–3600 seconds. Helix caches the value, so the number may
+  lag behind reality by tens of seconds.
+- A network error is not shown as a notification. The window keeps the last value at 45% opacity;
+  after the next successful request it becomes fully opaque again. If no value has been read yet,
+  the window stays hidden and the reason is written to the log as `Оверлей зрителей: ...`.
+- The window does not take focus, does not appear in the taskbar or Alt+Tab, and can be dragged with
+  the mouse. The position is saved in `settings.json`; if the saved monitor is disconnected, the
+  window returns to the top-right corner with a 24 px margin.
+- Showing the overlay in the stream requires capturing this window or the whole screen in OBS. The
+  application does not create a separate OBS source.
 
 ## Microphone toggle
 
@@ -123,6 +148,25 @@ corresponding voice commands are unavailable.
 
 Implicit matching of similar source names is deliberately not applied: a wrong name must not mute
 the wrong source.
+
+## Yandex Music
+
+The desktop Yandex Music app is controlled through Windows media sessions. The browser version is
+not controlled: it usually publishes a different session, and selecting a browser automatically
+would pause the wrong player.
+
+- `Плеер Яндекс Музыки не найден: пауза не выполнена` — the OBS source was muted, but the app has no
+  Windows media session. Start playback in the desktop app and repeat the command. The OBS action
+  remains successful.
+- `Плеер Яндекс Музыки не найден: трек не переключён` — the next-track command did not find the
+  player. Start the desktop app and check that it shows up in the Windows media popup.
+- `Не удалось поставить паузу в Яндекс Музыке: ...` or `Не удалось переключить трек: ...` — Windows
+  accepted the request but returned an error. The reason is in the notification and the log; OBS
+  commands are not affected.
+- `включи музыку` unmutes the OBS source but does not resume playback. This is expected: the
+  application only pauses when the source is muted, it never starts the player on its own.
+- A paused Yandex Music session is still a valid target. If there are several Yandex sessions, the
+  playing one is preferred.
 
 ## Recording and replay name
 

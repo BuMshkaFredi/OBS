@@ -37,9 +37,13 @@ cloud recognition service.
 - Confirmation for starting and stopping the stream, stopping the recording, and changing the Twitch
   title and category.
 - Twitch connection through OAuth.
-- Changing the Twitch title after confirmation.
+- Changing the Twitch title after confirmation, preserving existing `!` tags.
 - Exact Twitch category lookup, showing the found result, and changing the category after
   confirmation.
+- Pausing the Yandex Music desktop app when personal music is muted and switching to the next track
+  by voice.
+- An optional always-on-top viewer count overlay fed by the Twitch Helix API.
+- An MP4 copy of a recording or replay next to the original OBS file.
 - Setting real OBS source names in the “OBS settings” window: names are entered manually or pulled
   from the running OBS as a list.
 - A log of the current run in memory without persisting history between runs.
@@ -365,8 +369,9 @@ Work:
    handled and not thrown into the UI without explanation.
 2. Dispatcher: after a successful mute of `PersonalMusic`, call pause. When the source is unmuted,
    the pause is not released: resuming remains up to the user.
-3. New intent `NextMusicTrack`: phrases `следующий трек`, `переключи трек`, `следующая песня`. It
-   works through the same `VoiceCommandPipeline` as the other commands; no confirmation is required.
+3. New intent `NextMusicTrack`: phrases `следующий трек`, `следующая песня`, `переключи трек`,
+   `переключить трек`, `смени трек`, `сменить трек`. It works through the same
+   `VoiceCommandPipeline` as the other commands; no confirmation is required.
 4. The notification shows both the actual source state and the result of the pause or track switch.
 
 Readiness criteria:
@@ -378,6 +383,9 @@ Readiness criteria:
   visible in the notification;
 - unit tests cover session selection, the absence of a session, and notification texts;
 - manual verification with Yandex Music running.
+
+Status 2026-10-27: implemented in `Integrations/Media` and `CommandDispatcher`; unit tests pass.
+Manual tests 21–22 require the Yandex Music desktop app and remain pending.
 
 ### 9.2. Recording and replay: both mkv and mp4
 
@@ -396,6 +404,9 @@ The task is to lock in the behavior, not to change it:
 No code is required if the tests and documentation already match. Change the implementation only if
 a discrepancy is found.
 
+Status 2026-10-27: already implemented in `Recordings/FfmpegMp4CopyService`; no code change was
+needed. Manual test 23 remains pending.
+
 ### 9.3. Tags in the Twitch title
 
 Goal: when the stream title changes, the tags that are already in the current title are preserved.
@@ -408,6 +419,8 @@ Decisions:
   they appear in the old one and without duplicates. If a tag is already present in the new title, it
   is not duplicated.
 - The confirmation shows the final title in full: the user sees exactly what will go to Twitch.
+- Only trailing punctuation is removed from the user's title; the rest of the text and its case are
+  kept as spoken.
 - If the result is longer than 140 characters, the command is rejected with a clear message; the
   user's text is not truncated, and no external call is made.
 - Reading the title requires no new scope: the existing token is used.
@@ -430,6 +443,9 @@ Readiness criteria:
 - a title read error rejects the command and the title does not change;
 - unit tests: extraction, case, duplicates, limit, no tags, empty title.
 
+Status 2026-10-27: implemented in `TwitchTitleComposer` and `TwitchCommandAdapter`; unit tests pass.
+Manual test 24 remains pending.
+
 ### 9.4. Viewer overlay
 
 Goal: a small always-on-top window shows the viewer count of the current broadcast.
@@ -438,14 +454,18 @@ Decisions:
 
 - WPF window `Overlay/ViewerCountOverlayWindow`: `Topmost`, no border, transparent background, not
   shown in the taskbar, and does not take focus; the position is saved in settings.
-- Data — Helix `GET /streams?user_login=<login>`; with an empty `data` the window hides, because the
-  broadcast is not running. No new scope is needed.
+- Data — Helix `GET /streams?user_id=<broadcaster_id>`; with an empty `data` the window hides,
+  because the broadcast is not running. No new scope is needed.
+- The overlay is disabled by default and is toggled by the checkable `Счётчик зрителей` tray item
+  or by the checkbox in the settings window. The settings are applied without restarting.
 - Polling runs only when the overlay is enabled and Twitch is connected; the default interval is
-  30 seconds, the minimum is 15 seconds.
-- Network errors are not shown as notifications: the window keeps the last value and dims, so as not
-  to spam during the stream.
+  30 seconds, the minimum is 15 seconds, and the maximum is 3600 seconds.
+- Network errors are not shown as notifications: the window keeps the last value and dims to 45%,
+  so as not to spam during the stream.
 - The overlay is not part of notifications and lives in the `Overlay` module; the window does not
   call Helix directly, and the data comes through the `IViewerCountProvider` port.
+- The initial position is the top-right corner with a 24 px margin; the position is saved after
+  dragging and is ignored if it points to a disconnected monitor.
 
 Work:
 
@@ -453,8 +473,9 @@ Work:
    the empty list.
 2. A polling service with cancellation, pausing when Twitch disconnects, and resuming after a
    reconnect.
-3. Window: large-font number, semi-transparent background, mouse dragging, position persistence, and
-   a “Hide overlay” menu item. Showing it in OBS is done by capturing the window or the screen; the
+3. Window: large-font number, semi-transparent background, correct Russian plural forms
+   (`1 зритель`, `2 зрителя`, `5 зрителей`), mouse dragging, position persistence, and the checkable
+   `Счётчик зрителей` tray item. Showing it in OBS is done by capturing the window or the screen; the
    application does not create a separate OBS source.
 4. A setting for enabling the overlay and the interval in the settings window.
 
@@ -466,8 +487,15 @@ Readiness criteria:
 - when Twitch is unavailable the application does not crash and does not present zeros as fact;
 - unit tests for polling and the view model; manual verification with a real stream.
 
+Status 2026-10-27: implemented in `Overlay`, `TwitchViewerCountProvider`, settings, and the tray
+menu; unit tests pass. Manual test 25 remains pending.
+
 ### 9.5. Common criteria for section 9
 
 - `dotnet build` and `dotnet test` pass;
 - manual tests 21–25 are completed;
 - `AGENTS.md` and README are updated: new commands, settings, and dependencies.
+
+Status 2026-10-27: release build and all automated tests pass; `AGENTS.md`, the documentation, and
+`README.md` are updated. Manual tests 21–25 are pending and require the Yandex Music desktop app,
+OBS Studio, and saved Twitch tokens.
