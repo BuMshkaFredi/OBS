@@ -18,7 +18,7 @@ public partial class RecordingNameWindow : Window
         Closed += (_, _) => completion.TrySetResult(null);
     }
 
-    /// <summary>Введённый префикс или <c>null</c>, если окно закрыли без ответа.</summary>
+    /// <summary>Введённое название или <c>null</c>, если окно закрыли без ответа.</summary>
     public Task<string?> Completion => completion.Task;
 
     private void OnLoaded(object sender, RoutedEventArgs e)

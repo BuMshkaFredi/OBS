@@ -4,7 +4,7 @@ namespace ObsVoiceAssistant.Commands;
 
 /// <summary>
 /// Единый источник текстов голосовых команд. Помимо точных фраз здесь хранится
-/// словарь канонических слов: по нему исправляются ошибки распознавания в 1–2 буквы.
+/// словарь канонических слов: по нему исправляются ошибки распознавания в 1–3 буквы.
 /// </summary>
 public static class CommandVocabulary
 {
@@ -181,11 +181,16 @@ public static class CommandVocabulary
         new("запись завершить", CommandIntent.StopRecording),
         new("стоп записи", CommandIntent.StopRecording),
         new("конец записи", CommandIntent.StopRecording),
+        new("сохрани запись", CommandIntent.StopRecording),
+        new("сохранить запись", CommandIntent.StopRecording),
+        new("запись сохрани", CommandIntent.StopRecording),
 
         // Стрим: старт.
         new("начни стрим", CommandIntent.StartStream),
         // Vosk слышит «начни стрим» как «начни стареем»; формулировка взята из лога.
         new("начни стареем", CommandIntent.StartStream),
+        // Vosk слышит «начни» как «ночи» (лог 21.10 2026, 22:04).
+        new("ночи стрим", CommandIntent.StartStream),
         new("начать стрим", CommandIntent.StartStream),
         new("начинай стрим", CommandIntent.StartStream),
         new("начинаем стрим", CommandIntent.StartStream),
@@ -329,6 +334,7 @@ public static class CommandVocabulary
         new("муд", CommandIntent.ToggleInput, "microphone"),
         new("мод", CommandIntent.ToggleInput, "microphone"),
         new("мут микрофона", CommandIntent.ToggleInput, "microphone"),
+        new("мог", CommandIntent.ToggleInput, "microphone"),
         new("мог микрофона", CommandIntent.ToggleInput, "microphone"),
 
         new("выключи звук браузера", CommandIntent.MuteInput, "browser"),
@@ -495,6 +501,13 @@ public static class CommandVocabulary
         var builder = new StringBuilder(lowered.Length);
         foreach (var symbol in lowered)
         {
+            // Дефис склеивает составное слово: Vosk слышит «как-то» одним словом.
+            // Если разбить его на два токена, лишнее слово ломает сопоставление.
+            if (symbol == '-')
+            {
+                continue;
+            }
+
             builder.Append(char.IsLetterOrDigit(symbol) ? symbol : ' ');
         }
 

@@ -98,6 +98,28 @@ public sealed class VoiceCommandPipeline
 
         diagnostic?.Invoke($"Распознана команда: {command.Intent}");
 
+        // Категорию Twitch проверяем до подтверждения: пользователь должен увидеть
+        // точное название первого результата поиска, а dispatch уже получает game_id.
+        if (command.Intent == CommandIntent.SetStreamCategory)
+        {
+            try
+            {
+                command = await dispatcher.PrepareAsync(command, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                diagnostic?.Invoke(
+                    $"Не удалось подготовить категорию Twitch: {exception.GetType().Name}: {exception.Message}");
+                notify?.Invoke($"Не удалось найти категорию на Twitch: {Truncate(exception.Message)}");
+                return;
+            }
+        }
+
         if (dispatcher.RequiresConfirmation(command))
         {
             diagnostic?.Invoke($"Требуется подтверждение: {command.Intent}");

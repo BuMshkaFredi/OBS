@@ -341,6 +341,90 @@ public sealed class VoiceCommandPipelineTests
         Assert.Contains(notified, message => message == "Весь звук выключен (источников: 5)");
     }
 
+    [Fact]
+    public async Task Category_IsPreparedBeforeConfirmationAndDispatch()
+    {
+        var twitch = new PreparingTwitchPort();
+        var confirmation = new FakeConfirmationService(true);
+        var notified = new List<string>();
+        var pipeline = new VoiceCommandPipeline(
+            new FakeRecognizer("измени категорию стрима на dota 2"),
+            new CommandParser(),
+            new CommandDispatcher(new RecordingPort(), twitch, new ConfirmationPolicy()),
+            confirmation,
+            notify: notified.Add);
+
+        await pipeline.ProcessAsync(CreateRecording());
+
+        Assert.NotNull(confirmation.LastCommand);
+        Assert.Equal("Dota 2", confirmation.LastCommand.Argument);
+        Assert.Equal("game-1", confirmation.LastCommand.ArgumentId);
+        Assert.Equal("game-1", twitch.LastCommand?.ArgumentId);
+        Assert.Contains(notified, message => message.Contains("Dota 2", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Category_PrepareFailure_NotifiesAndDoesNotAskForConfirmation()
+    {
+        var twitch = new FailingPrepareTwitchPort();
+        var confirmation = new FakeConfirmationService(true);
+        var notified = new List<string>();
+        var pipeline = new VoiceCommandPipeline(
+            new FakeRecognizer("измени категорию стрима на dota 2"),
+            new CommandParser(),
+            new CommandDispatcher(new RecordingPort(), twitch, new ConfirmationPolicy()),
+            confirmation,
+            notify: notified.Add);
+
+        await pipeline.ProcessAsync(CreateRecording());
+
+        Assert.Null(confirmation.LastCommand);
+        Assert.Null(twitch.LastCommand);
+        Assert.Contains(
+            notified,
+            message => message.Contains("Не удалось найти категорию", StringComparison.Ordinal));
+    }
+
+    private sealed class PreparingTwitchPort : ITwitchCommandPort
+    {
+        public ParsedCommand? LastCommand { get; private set; }
+
+        public Task<ParsedCommand> PrepareAsync(
+            ParsedCommand command,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(command with
+            {
+                Argument = "Dota 2",
+                ArgumentId = "game-1"
+            });
+
+        public Task<string?> ExecuteAsync(
+            ParsedCommand command,
+            CancellationToken cancellationToken = default)
+        {
+            LastCommand = command;
+            return Task.FromResult<string?>($"Категория изменена: «{command.Argument}»");
+        }
+    }
+
+    private sealed class FailingPrepareTwitchPort : ITwitchCommandPort
+    {
+        public ParsedCommand? LastCommand { get; private set; }
+
+        public Task<ParsedCommand> PrepareAsync(
+            ParsedCommand command,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Twitch не подключён.");
+
+        public Task<string?> ExecuteAsync(
+            ParsedCommand command,
+            CancellationToken cancellationToken = default)
+        {
+            LastCommand = command;
+            return Task.FromResult<string?>(null);
+        }
+    }
+
     private sealed class FailingPort(string message) : IObsCommandPort
     {
         public Task<string?> ExecuteAsync(ParsedCommand command, CancellationToken cancellationToken = default) =>

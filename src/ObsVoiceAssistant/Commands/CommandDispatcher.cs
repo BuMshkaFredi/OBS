@@ -19,12 +19,24 @@ public sealed class CommandDispatcher
     public bool RequiresConfirmation(ParsedCommand command) =>
         confirmationPolicy.RequiresConfirmation(command.Intent);
 
-    public async Task<string?> DispatchAsync(ParsedCommand command, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Выполняет проверку до подтверждения. Сейчас она нужна категории Twitch:
+    /// пользователь должен увидеть в уведомлении реальное название с Twitch.
+    /// </summary>
+    public Task<ParsedCommand> PrepareAsync(
+        ParsedCommand command,
+        CancellationToken cancellationToken = default) =>
+        command.Intent == CommandIntent.SetStreamCategory
+            ? twitch.PrepareAsync(command, cancellationToken)
+            : Task.FromResult(command);
+
+    public async Task<string?> DispatchAsync(
+        ParsedCommand command,
+        CancellationToken cancellationToken = default)
     {
         if (command.Intent is CommandIntent.SetStreamTitle or CommandIntent.SetStreamCategory)
         {
-            await twitch.ExecuteAsync(command, cancellationToken).ConfigureAwait(false);
-            return null;
+            return await twitch.ExecuteAsync(command, cancellationToken).ConfigureAwait(false);
         }
 
         return await obs.ExecuteAsync(command, cancellationToken).ConfigureAwait(false);

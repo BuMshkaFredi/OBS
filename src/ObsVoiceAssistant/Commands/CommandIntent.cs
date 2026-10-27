@@ -21,4 +21,5 @@ public sealed record ParsedCommand(
     CommandIntent Intent,
     string? Argument = null,
     string? Target = null,
-    int? Delta = null);
+    int? Delta = null,
+    string? ArgumentId = null);

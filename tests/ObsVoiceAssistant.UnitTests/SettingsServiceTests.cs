@@ -96,6 +96,25 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
+    public void SaveAndLoad_PersistsTwitchClientId()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var service = new SettingsService(directory);
+            service.Save(new AppSettings { TwitchClientId = "twitch-client-id" });
+
+            var loaded = service.Load();
+
+            Assert.Equal("twitch-client-id", loaded.TwitchClientId);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void SaveAndLoadObsPassword_UsesProtectedStorageNotSettingsJson()
     {
         var directory = CreateTempDirectory();

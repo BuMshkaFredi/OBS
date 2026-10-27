@@ -26,6 +26,23 @@ public static class VolumeCommandParser
     /// </summary>
     private static readonly TargetForm[] TargetForms = BuildTargetForms();
 
+    /// <summary>
+    /// Точечные замены слов, которые Vosk устойчиво путает в командах громкости.
+    /// Это не общий фаззи-матчинг: замена применяется только к указанному каноническому
+    /// слову, поэтому не расширяет остальные команды.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> RecognitionAliases =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["стрела"] = "стрима"
+        };
+
+    private static readonly IReadOnlyDictionary<string, string> NumberAliases =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["стал"] = "сто"
+        };
+
     private static readonly IReadOnlyDictionary<string, int> NumberWords =
         new Dictionary<string, int>(StringComparer.Ordinal)
         {
@@ -97,6 +114,15 @@ public static class VolumeCommandParser
             return null;
         }
 
+        var preposedSign = 0;
+        if (tokens.Length >= 2 &&
+            TryGetPreposedSign(tokens[0], out var candidateSign) &&
+            MatchesToken(tokens[1], "громкость", null))
+        {
+            preposedSign = candidateSign;
+            tokens = tokens[1..];
+        }
+
         var foundCorrections = new List<TokenCorrection>();
         var index = 0;
 
@@ -116,28 +142,46 @@ public static class VolumeCommandParser
             index += targetForm.Tokens.Length;
         }
 
-        if (index >= tokens.Length)
-        {
-            return null;
-        }
-
         int sign;
-        if (MatchesToken(tokens[index], "плюс", foundCorrections) ||
-            MatchesToken(tokens[index], "громче", foundCorrections))
+        if (preposedSign != 0)
         {
-            sign = 1;
-        }
-        else if (MatchesToken(tokens[index], "минус", foundCorrections) ||
-                 MatchesToken(tokens[index], "тише", foundCorrections))
-        {
-            sign = -1;
+            // «меньше громкость микрофоном» уже содержит направление.
+            // Второе направление в той же фразе не угадываем.
+            if (index < tokens.Length &&
+                (MatchesToken(tokens[index], "плюс", null) ||
+                 MatchesToken(tokens[index], "громче", null) ||
+                 MatchesToken(tokens[index], "минус", null) ||
+                 MatchesToken(tokens[index], "тише", null)))
+            {
+                return null;
+            }
+
+            sign = preposedSign;
         }
         else
         {
-            return null;
-        }
+            if (index >= tokens.Length)
+            {
+                return null;
+            }
 
-        index++;
+            if (MatchesToken(tokens[index], "плюс", foundCorrections) ||
+                MatchesToken(tokens[index], "громче", foundCorrections))
+            {
+                sign = 1;
+            }
+            else if (MatchesToken(tokens[index], "минус", foundCorrections) ||
+                     MatchesToken(tokens[index], "тише", foundCorrections))
+            {
+                sign = -1;
+            }
+            else
+            {
+                return null;
+            }
+
+            index++;
+        }
 
         var amount = DefaultStep;
         if (index < tokens.Length &&
@@ -246,6 +290,32 @@ public static class VolumeCommandParser
         }
     }
 
+    private static bool TryGetPreposedSign(string token, out int sign)
+    {
+        switch (token)
+        {
+            case "меньше":
+            case "тише":
+            case "потише":
+            case "убавь":
+            case "уменьши":
+                sign = -1;
+                return true;
+
+            case "больше":
+            case "громче":
+            case "погромче":
+            case "прибавь":
+            case "увеличь":
+                sign = 1;
+                return true;
+
+            default:
+                sign = 0;
+                return false;
+        }
+    }
+
     private static bool MatchesToken(
         string token,
         string canonical,
@@ -253,6 +323,13 @@ public static class VolumeCommandParser
     {
         if (string.Equals(token, canonical, StringComparison.Ordinal))
         {
+            return true;
+        }
+
+        if (RecognitionAliases.TryGetValue(token, out var alias) &&
+            string.Equals(alias, canonical, StringComparison.Ordinal))
+        {
+            corrections?.Add(new TokenCorrection(token, canonical));
             return true;
         }
 
@@ -323,6 +400,13 @@ public static class VolumeCommandParser
     {
         if (NumberWords.TryGetValue(token, out value))
         {
+            return true;
+        }
+
+        if (NumberAliases.TryGetValue(token, out var alias) &&
+            NumberWords.TryGetValue(alias, out value))
+        {
+            corrections.Add(new TokenCorrection(token, alias));
             return true;
         }
 
@@ -400,6 +484,7 @@ public static class VolumeCommandParser
             "личная музыка");
         AddTarget(
             "stream_music",
+            "стрима",
             "музыки стрима",
             "музыку стрима",
             "музыка стрима",

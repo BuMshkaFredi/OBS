@@ -13,6 +13,24 @@ public sealed record AppSettings(
     /// потому что имена источников у каждого пользователя свои.
     /// </summary>
     public ObsAudioInputs AudioInputs { get; init; } = new();
+
+    /// <summary>
+    /// Client ID приложения Twitch. Это публичный идентификатор, не секрет.
+    /// Токены хранятся отдельно, в защищённом хранилище Windows.
+    /// </summary>
+    public string? TwitchClientId { get; init; }
+
+    /// <summary>
+    /// Создавать MP4-копию записи и повтора. Файл не перекодируется: потоки
+    /// копируются как есть, поэтому качество не меняется.
+    /// </summary>
+    public bool CreateMp4Copy { get; init; } = true;
+
+    /// <summary>
+    /// Путь к ffmpeg.exe. Если пусто, программа ищется в папке ffmpeg рядом
+    /// с приложением и в PATH.
+    /// </summary>
+    public string? FfmpegPath { get; init; }
 }
 
 public sealed class SettingsService

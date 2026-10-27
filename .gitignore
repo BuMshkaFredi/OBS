@@ -48,6 +48,9 @@ crash-reports/
 models/*
 !models/.gitkeep
 
+# ffmpeg is an external program and must not be committed.
+tools/ffmpeg/
+
 # --- Переписка с заказчиком: персональные данные не коммитятся ---
 docs/customer-questions/policy.json
 docs/customer-questions/answers/*

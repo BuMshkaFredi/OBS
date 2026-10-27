@@ -1,39 +1,58 @@
-# Реестр вопросов заказчику
+# Customer question registry
 
-Статусы партии: `draft` — черновик, `approved` — разрешена к отправке, `sent` — отправлена,
-`answered` — ответ получен и записан, `closed` — решение принято, `rejected` — вопрос снят.
+Batch statuses: `draft` — draft, `approved` — allowed to send, `sent` — sent, `answered` — reply
+received and recorded, `closed` — decision made, `rejected` — question withdrawn.
 
-Решения по полученным ответам принимает пользователь. Агент только фиксирует ответы
-и не меняет требования, код или конфигурацию.
+The user makes decisions on the replies received. The agent only records replies and does not change
+requirements, code, or configuration.
 
-| Партия | Тема | Статус | Отправлено | Ответ | Решение пользователя |
+| Batch | Topic | Status | Sent | Reply | User decision |
 | --- | --- | --- | --- | --- | --- |
-| CQ-001 | поведение OBS | closed | 2026-10-20 | 2026-10-20 | принято: п. 1–3; п. 4 отложен |
+| CQ-001 | OBS behavior | closed | 2026-10-20 | 2026-10-20 | accepted: items 1–3; item 4 postponed |
 
-## Внеплановые пожелания
+## Unscheduled wishes
 
-Пожелания, которые заказчик добавил сам, вне списка вопросов. Каждое фиксируется отдельной
-строкой и ждёт решения пользователя; автоматически ничего не реализуется.
+Wishes that the customer added on their own, outside the question list. Each is recorded as a
+separate row and awaits the user's decision; nothing is implemented automatically.
 
-| Дата | Пожелание | Источник | Решение пользователя |
+| Date | Wish | Source | User decision |
 | --- | --- | --- | --- |
-| — | — | — | — |
+| 2026-10-27 | When personal music is turned off, pause the music playing in the “Yandex Music” app; additionally, switch to the next track by a voice command | `answers/reply-20261027-043724-a15e4e8515.md`, item 1 | accepted: pause through Windows media sessions, command `следующий трек` (next track) |
+| 2026-10-27 | Automatic conversion of a saved recording or replay from mkv to mp4 | `answers/reply-20261027-043724-a15e4e8515.md`, item 2 | accepted: both files are kept — the original mkv and the mp4 copy (already implemented) |
+| 2026-10-27 | When renaming the stream, keep the tags in the title (for example, `!tg`, `!exitlag`, and similar) | `answers/reply-20261027-043724-a15e4e8515.md`, item 3 | accepted: words starting with `!` are kept, without duplicates |
+| 2026-10-27 | If possible, show the number of viewers in real time | `answers/reply-20261027-043724-a15e4e8515.md`, item 4 | accepted: a separate always-on-top window |
 
-## Журнал по партиям
+User decision on 2026-10-27: all four wishes are accepted. The tasks are added to
+[`docs/MVP_PLAN.md`](../MVP_PLAN.md), section 9 “Additional tasks (slice 7)”; manual tests 21–25 are
+there as well. The email of 2026-10-27 does not contain answers to the batch questions: `CQ-001` is
+already closed, and the email contains only unscheduled wishes. The original is saved in
+`answers/reply-20261027-043724-a15e4e8515.md`.
 
-### CQ-001 — поведение OBS
+## Batch log
 
-Отправлено 2026-10-20 с адреса отправителя на адрес заказчика (значения — в `policy.json`).
-Ответ получен 2026-10-20, сохранён в `answers/reply-20261020-080806-075327ae0a.md`.
+### CQ-001 — OBS behavior
 
-- `CQ-001-1` Нужно ли подтверждение кнопкой для запуска записи и запуска стрима, или достаточно уведомления о результате? — ответ: «уведом на запись, кнопку подтверждения на стриме»
-- `CQ-001-2` Что должно происходить, если фраза распознана неуверенно: молчать или показывать уведомление о непонятой команде? — ответ: «уведомление бы маленькое»
-- `CQ-001-3` Должен ли Replay Buffer включаться при каждом подключении к OBS, если вы выключили его вручную? — ответ: «нет»
-- `CQ-001-4` Как определять, какой аудиоисточник переключать, если в текущей сцене несколько подходящих источников? — ответ: «в таком случае программа может дополнительно спрашивать, какая по счету аудиодорожка именно нужна если считать слева направо»
+Sent on 2026-10-20 from the sender address to the customer address (the values are in `policy.json`).
+The reply was received on 2026-10-20 and saved in `answers/reply-20261020-080806-075327ae0a.md`.
 
-Решение пользователя (2026-10-20):
+- `CQ-001-1` Is button confirmation needed to start a recording and start a stream, or is a result
+  notification enough? — answer: «уведом на запись, кнопку подтверждения на стриме» (a notification
+  for recording, a confirmation button for the stream)
+- `CQ-001-2` What should happen if a phrase is recognized with low confidence: stay silent or show a
+  notification about an unrecognized command? — answer: «уведомление бы маленькое» (a small
+  notification would be fine)
+- `CQ-001-3` Should Replay Buffer be enabled on every connection to OBS if you disabled it manually?
+  — answer: «нет» (no)
+- `CQ-001-4` How should the application determine which audio source to toggle if the current scene
+  has several suitable sources? — answer: «в таком случае программа может дополнительно спрашивать,
+  какая по счету аудиодорожка именно нужна если считать слева направо» (in that case the program can
+  additionally ask which audio track number is needed, counting from left to right)
 
-- `CQ-001-1` принято: запуск записи показывает уведомление, запуск стрима требует подтверждения кнопкой.
-- `CQ-001-2` принято: при нераспознанной фразе показывается маленькое уведомление трея.
-- `CQ-001-3` принято с уточнением: Replay Buffer включается при подключении, но после ручного выключения не включается повторно до перезапуска приложения.
-- `CQ-001-4` отложено, не реализуется.
+User decision (2026-10-20):
+
+- `CQ-001-1` accepted: starting a recording shows a notification, starting a stream requires button
+  confirmation.
+- `CQ-001-2` accepted: an unrecognized phrase shows a small tray notification.
+- `CQ-001-3` accepted with a clarification: Replay Buffer is enabled on connection, but after a manual
+  shutdown it is not re-enabled until the application restarts.
+- `CQ-001-4` postponed, not implemented.

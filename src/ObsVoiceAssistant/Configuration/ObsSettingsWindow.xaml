@@ -1,11 +1,13 @@
 <Window x:Class="ObsVoiceAssistant.Configuration.ObsSettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Настройка OBS"
+        Title="Настройки"
         Icon="pack://application:,,,/Assets/app.ico"
-        Width="520"
-        Height="620"
-        ResizeMode="NoResize"
+        Width="540"
+        Height="760"
+        MinWidth="520"
+        MinHeight="560"
+        ResizeMode="CanResizeWithGrip"
         WindowStartupLocation="CenterScreen">
     <Grid Margin="20">
         <Grid.RowDefinitions>
@@ -48,12 +50,85 @@
                 <TextBlock Text="Личная музыка" />
                 <ComboBox x:Name="PersonalMusicBox" IsEditable="True" Margin="0,6,0,10" />
 
+                <Separator Margin="0,10,0,12" />
+
+                <TextBlock Text="Запись и повтор"
+                           FontWeight="Bold"
+                           FontSize="15" />
+                <CheckBox x:Name="CreateMp4CopyCheckBox"
+                          Content="Создавать MP4-копию записи и повтора"
+                          Margin="0,8,0,4" />
+                <TextBlock Text="Копия делается без перекодирования: качество не меняется. Нужен ffmpeg.exe — укажите путь или положите ffmpeg.exe в папку ffmpeg рядом с программой. Повтор OBS сохраняет сразу в MP4, для него копия не создаётся."
+                           TextWrapping="Wrap"
+                           Foreground="Gray"
+                           Margin="0,0,0,8" />
+                <TextBlock Text="Путь к ffmpeg.exe" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="FfmpegPathBox"
+                             Grid.Column="0"
+                             Margin="0,6,8,14" />
+                    <Button x:Name="BrowseFfmpegButton"
+                            Grid.Column="1"
+                            Content="Обзор..."
+                            Width="90"
+                            Margin="0,6,0,14"
+                            Click="BrowseFfmpeg_Click" />
+                </Grid>
+
+                <Separator Margin="0,10,0,12" />
+
+                <TextBlock Text="Twitch"
+                           FontWeight="Bold"
+                           FontSize="15" />
+                <TextBlock Text="Создайте приложение на dev.twitch.tv/console/apps и скопируйте Client ID. Client secret не нужен: используется вход через код устройства."
+                           TextWrapping="Wrap"
+                           Foreground="Gray"
+                           Margin="0,4,0,10" />
+
+                <TextBlock Text="Client ID" />
+                <TextBox x:Name="TwitchClientIdBox"
+                         Margin="0,6,0,10"
+                         TextChanged="TwitchClientId_TextChanged" />
+
+                <WrapPanel Margin="0,0,0,6">
+                    <Button x:Name="ConnectTwitchButton"
+                            Content="Подключить Twitch"
+                            Width="150"
+                            Click="ConnectTwitch_Click" />
+                    <Button x:Name="DisconnectTwitchButton"
+                            Content="Отключить"
+                            Width="95"
+                            Margin="8,0,0,0"
+                            Click="DisconnectTwitch_Click" />
+                    <Button x:Name="OpenTwitchButton"
+                            Content="Открыть страницу Twitch"
+                            Width="170"
+                            Margin="8,0,0,0"
+                            Visibility="Collapsed"
+                            Click="OpenTwitch_Click" />
+                </WrapPanel>
+
+                <TextBlock x:Name="TwitchCodeText"
+                           FontFamily="Consolas"
+                           FontSize="18"
+                           FontWeight="Bold"
+                           Margin="0,4,0,4"
+                           Visibility="Collapsed" />
+                <TextBlock x:Name="TwitchStatusText"
+                           TextWrapping="Wrap"
+                           Foreground="Gray"
+                           Margin="0,4,0,12" />
+
                 <TextBlock x:Name="StatusText" TextWrapping="Wrap" Foreground="#B00020" />
             </StackPanel>
         </ScrollViewer>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Сохранить" Width="95" Margin="0,0,8,0" Click="Save_Click" />
+            <Button x:Name="SaveButton" Content="Сохранить" Width="95" Margin="0,0,8,0" Click="Save_Click" />
             <Button Content="Отмена" Width="95" IsCancel="True" Click="Cancel_Click" />
         </StackPanel>
     </Grid>

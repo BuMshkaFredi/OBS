@@ -15,6 +15,7 @@ public sealed class CommandParserTests
     [InlineData("выключи микрофон!", CommandIntent.ToggleInput)]
     [InlineData("включи микрофон", CommandIntent.ToggleInput)]
     [InlineData("останови трансляцию", CommandIntent.StopStream)]
+    [InlineData("ночи стрим", CommandIntent.StartStream)]
     public void Parse_KnownPhrase_ReturnsExpectedIntent(string text, CommandIntent expected)
     {
         var result = parser.Parse(text);

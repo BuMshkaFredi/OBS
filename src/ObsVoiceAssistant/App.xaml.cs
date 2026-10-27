@@ -7,6 +7,7 @@ using ObsVoiceAssistant.Commands;
 using ObsVoiceAssistant.Configuration;
 using ObsVoiceAssistant.Diagnostics;
 using ObsVoiceAssistant.Integrations.Obs;
+using ObsVoiceAssistant.Integrations.Twitch;
 using ObsVoiceAssistant.Notifications;
 using ObsVoiceAssistant.Recordings;
 using ObsVoiceAssistant.Speech;
@@ -20,6 +21,7 @@ public partial class App : System.Windows.Application
     private TrayIconService? trayIcon;
     private NotificationPanelService? notifications;
     private ObsWebSocketClient? obsClient;
+    private TwitchService? twitchService;
     private ApplicationOrchestrator? orchestrator;
     private NAudioMicrophoneRecorder? microphoneRecorder;
     private NAudioMicrophoneRecorder? wakeWordRecorder;
@@ -56,6 +58,7 @@ public partial class App : System.Windows.Application
         }
 
         settingsService = new SettingsService();
+        twitchService = new TwitchService(settingsService);
         trayIcon = new TrayIconService(ShowObsSettings, Shutdown);
         notifications = new NotificationPanelService();
         speechRecognizer = CreateSpeechRecognizer();
@@ -152,6 +155,7 @@ public partial class App : System.Windows.Application
         recordingNaming?.Dispose();
         notifications?.Dispose();
         obsClient?.Dispose();
+        twitchService?.Dispose();
         trayIcon?.Dispose();
         singleInstance?.Dispose();
         base.OnExit(e);
@@ -180,12 +184,12 @@ public partial class App : System.Windows.Application
 
     private void ShowObsSettings()
     {
-        if (settingsService is null)
+        if (settingsService is null || twitchService is null)
         {
             return;
         }
 
-        var window = new ObsSettingsWindow(settingsService, LoadObsInputNamesAsync);
+        var window = new ObsSettingsWindow(settingsService, twitchService, LoadObsInputNamesAsync);
         if (window.ShowDialog() == true)
         {
             RestartObsConnection();
@@ -280,6 +284,8 @@ public partial class App : System.Windows.Application
             if (string.IsNullOrWhiteSpace(text))
             {
                 // На фоновом шуме и музыке Vosk часто не даёт текста — это не ошибка.
+                // Длительность и пиковый RMS показывают, был ли это шум или пропущенная речь.
+                LogEmptyWakeWordSegment(recording);
                 return;
             }
 
@@ -317,6 +323,22 @@ public partial class App : System.Windows.Application
         }
     }
 
+    private void LogEmptyWakeWordSegment(AudioRecording recording)
+    {
+        var samples = PcmAudio.AsInt16(recording.Data.Span).Length;
+        var durationMs = recording.SampleRate > 0 && recording.Channels > 0
+            ? (int)Math.Round(samples * 1000.0 / (recording.SampleRate * recording.Channels))
+            : 0;
+        var peakRms = SpeechActivityDetector.ComputePeakRms(
+            recording.Data.Span,
+            Math.Max(1, recording.SampleRate / 20));
+
+        logger.Info(
+            $"Vosk не распознал сегмент «Бочи»: {durationMs} мс, " +
+            $"пиковый RMS {peakRms:F0} (порог {SpeechActivityDetector.DefaultRmsThreshold:F0}), " +
+            $"байт {recording.Data.Length}");
+    }
+
     private async Task ProcessRecordingAsync(AudioRecording recording)
     {
         logger.Info($"Обработка аудиосегмента: {recording.Data.Length} байт");
@@ -345,10 +367,20 @@ public partial class App : System.Windows.Application
         var password = settingsService.LoadObsPassword();
         var obsOptions = new ObsConnectionOptions(settings.ObsUrl, password);
         obsClient = new ObsWebSocketClient(obsOptions);
+        var mp4Copy = new FfmpegMp4CopyService(
+            () =>
+            {
+                // Настройки читаются при каждом файле: новая настройка применяется
+                // без перезапуска приложения.
+                var current = settingsService.Load();
+                return new Mp4CopyOptions(current.CreateMp4Copy, current.FfmpegPath);
+            },
+            log: message => logger.Info(message));
         recordingNaming = new RecordingNamingService(
             new WpfRecordingNamePrompt(),
             message => notifications?.Show(message),
-            message => logger.Info(message));
+            message => logger.Info(message),
+            mp4Copy);
         recordingNaming.Attach(obsClient);
         var obsConnection = new ObsConnectionService(obsClient);
         obsConnection.ConnectionStateChanged += connected =>
@@ -365,7 +397,7 @@ public partial class App : System.Windows.Application
         var inputResolver = new ConfiguredObsInputResolver(settings.AudioInputs);
         commandDispatcher = new CommandDispatcher(
             new ObsCommandPortAdapter(obsClient, inputResolver),
-            new NullTwitchCommandPort(),
+            twitchService?.CommandPort ?? new NullTwitchCommandPort(),
             new ConfirmationPolicy());
 
         // Без распознавания соединение с OBS всё равно нужно: Replay Buffer и статус в трее.

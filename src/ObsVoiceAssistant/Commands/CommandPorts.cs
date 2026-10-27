@@ -11,7 +11,13 @@ public interface IObsCommandPort
 
 public interface ITwitchCommandPort
 {
-    Task ExecuteAsync(ParsedCommand command, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Проверяет команду до подтверждения: для категории находит её на Twitch
+    /// и подставляет точное название и game_id. Остальные команды возвращает без изменений.
+    /// </summary>
+    Task<ParsedCommand> PrepareAsync(ParsedCommand command, CancellationToken cancellationToken = default);
+
+    Task<string?> ExecuteAsync(ParsedCommand command, CancellationToken cancellationToken = default);
 }
 
 public interface IConfirmationPolicy

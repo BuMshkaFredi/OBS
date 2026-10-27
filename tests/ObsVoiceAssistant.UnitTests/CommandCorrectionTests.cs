@@ -95,7 +95,6 @@ public sealed class CommandCorrectionTests
     [InlineData("включи музыку потише")]
     [InlineData("включи музыку громче")]
     [InlineData("выключи музыку совсем")]
-    [InlineData("начни запись видео")]
     [InlineData("начни не трансляцию")]
     [InlineData("это запись")]
     [InlineData("вот стрим")]
@@ -221,6 +220,26 @@ public sealed class CommandCorrectionTests
     }
 
     [Theory]
+    [InlineData("блин включи микрофон", CommandIntent.ToggleInput, "microphone")]
+    [InlineData("вчера останови запись", CommandIntent.StopRecording, null)]
+    [InlineData("выключи бразуер", CommandIntent.MuteInput, "browser")]
+    [InlineData("сохрани запись", CommandIntent.StopRecording, null)]
+    [InlineData("начни запись видео", CommandIntent.StartRecording, null)]
+    [InlineData("начни запись экрана", CommandIntent.StartRecording, null)]
+    [InlineData("как-то начать трансляцию", CommandIntent.StartStream, null)]
+    public void Parse_BroaderRecognition_IsStillUnambiguous(
+        string text,
+        CommandIntent expected,
+        string? target)
+    {
+        var result = parser.Parse(text);
+
+        Assert.NotNull(result);
+        Assert.Equal(expected, result.Intent);
+        Assert.Equal(target, result.Target);
+    }
+
+    [Theory]
     [InlineData("не начни запись")]
     [InlineData("не выключай микрофон")]
     [InlineData("не надо останавливать запись")]
@@ -287,6 +306,7 @@ public sealed class CommandCorrectionTests
     [InlineData("мьют")]
     [InlineData("муд")]
     [InlineData("мод")]
+    [InlineData("мог")]
     [InlineData("мут микрофон")]
     [InlineData("мут микрофона")]
     [InlineData("мог микрофона")]

@@ -21,7 +21,7 @@ public sealed class TrayIconService : ITrayStatus, IDisposable
         statusItem = new Forms.ToolStripMenuItem("OBS: подключение...") { Enabled = false };
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add(statusItem);
-        menu.Items.Add("Настроить OBS", null, (_, _) => this.configureAction());
+        menu.Items.Add("Настройки", null, (_, _) => this.configureAction());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Выход", null, (_, _) => this.exitAction());
 

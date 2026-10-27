@@ -12,6 +12,10 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!-- CommunityToolkit.WinUI.Notifications тянет System.Drawing.Common 4.7.0 с критической
+         уязвимостью NU1904. Версия закрепляется явно и совпадает с зафиксированным
+         рантаймом .NET 10.0.12; в приложении пакет замещается сборкой WindowsDesktop. -->
+    <PackageReference Include="System.Drawing.Common" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup>

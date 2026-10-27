@@ -1,61 +1,65 @@
 # CustomerMail
 
-Утилита почтового канала: отправляет заказчику только вопросы о предпочтениях по реализации
-и забирает его ответы. Отдельного приложения это не касается, в installer и publish не входит.
+Mail-channel utility: it sends the customer only questions about implementation preferences
+and fetches their replies. It is not part of the application itself and is not included in the
+installer or publish output.
 
-## Гарантии, зашитые в код
+## Guarantees built into the code
 
-- Получатель один: `policy.json` → `customerAddress`, и он обязан совпадать с PIN-хешем
-  `AddressPin.CustomerAddressSha256`. Параметра «кому» не существует.
-- Писем без `status: approved` в файле партии не бывает; свободный текст в письмо не попадает.
-- Вложений, `CC`, `BCC`, HTML и нескольких получателей в коде нет.
-- Фильтр содержимого (`ContentGuard.cs`) запрещает ссылки, адреса почты, пути к файлам, IP,
-  код, GUID, длинные токены, слова про пароли/токены/секреты и упоминания внутренностей проекта.
-- Лимит писем в сутки и одна отправка на партию.
-- Журнал `docs/customer-questions/audit/mail-log.jsonl` пишется append-only.
-- Приём только от закреплённого адреса; чужие письма не читаются и не помечаются прочитанными.
+- A single recipient: `policy.json` → `customerAddress`, and it must match the PIN hash in
+  `AddressPin.CustomerAddressSha256`. There is no “to” parameter.
+- No email is sent without `status: approved` in the batch file; free-form text never goes into
+  the email.
+- The code has no attachments, `CC`, `BCC`, HTML, or multiple recipients.
+- The content filter (`ContentGuard.cs`) forbids links, email addresses, file paths, IPs, code,
+  GUIDs, long tokens, words about passwords/tokens/secrets, and mentions of project internals.
+- A daily email limit and one send per batch.
+- The log `docs/customer-questions/audit/mail-log.jsonl` is written append-only.
+- Only the pinned address is accepted; other people's emails are neither read nor marked as read.
 
-## Команды
+## Commands
 
 ```powershell
-# Проверить policy, PIN адреса и наличие учётных данных
+# Check the policy, the address PIN, and the presence of credentials
 dotnet run --project tools/CustomerMail -- check
 
-# Показать письмо, ничего не отправляя
+# Show the email without sending anything
 dotnet run --project tools/CustomerMail -- send --batch CQ-001 --preview
 
-# Отправить после разрешения пользователя
+# Send after user permission
 dotnet run --project tools/CustomerMail -- send --batch CQ-001
 
-# Забрать новые ответы заказчика
+# Fetch new customer replies
 dotnet run --project tools/CustomerMail -- fetch --limit 20
 
-# Посчитать SHA-256 адреса для PIN
+# Compute the SHA-256 of the address for the PIN
 dotnet run --project tools/CustomerMail -- pin-hash zakazchik@example.com
 ```
 
-Коды возврата: `0` — успех, `1` — ошибка, `2` — действие отклонено проверками.
+Exit codes: `0` — success, `1` — error, `2` — action rejected by the checks.
 
-## Разовая настройка
+## One-time setup
 
-### 1. Выделенный ящик Gmail
+### 1. Dedicated Gmail mailbox
 
-1. Используется отдельный ящик только для переписки с заказчиком (адрес задаётся в `policy.json`, настоящий адрес в репозиторий не попадает).
-2. Включите двухэтапную аутентификацию: без неё Google не выдаёт пароли приложений.
-3. Создайте пароль приложения: https://myaccount.google.com/apppasswords → «Другое» → любое имя,
-   например `obs-voice-assistant`. Получите 16-символьный пароль.
-4. Обычный пароль Google для SMTP/IMAP не подходит, а «доступ для менее безопасных приложений»
-   Google отключил.
+1. Use a separate mailbox only for correspondence with the customer (the address is set in
+   `policy.json`; the real address never enters the repository).
+2. Enable two-step authentication: without it Google does not issue app passwords.
+3. Create an app password: https://myaccount.google.com/apppasswords → “Other” → any name,
+   for example `obs-voice-assistant`. You will get a 16-character password.
+4. A regular Google password does not work for SMTP/IMAP, and Google has disabled
+   “access for less secure apps”.
 
-### 2. Переменные окружения
+### 2. Environment variables
 
-Пароль хранится только в переменных окружения пользователя, не в репозитории и не в `policy.json`.
+The password is stored only in the user environment variables, not in the repository and not in
+`policy.json`.
 
 ```powershell
 [Environment]::SetEnvironmentVariable('OBS_VA_MAIL_USER', 'your-mail@gmail.com', 'User')
 
-# Пароль приложения вводится скрыто, чтобы не попасть в историю команд:
-$secure = Read-Host -AsSecureString 'Пароль приложения Gmail'
+# The app password is entered hidden so it does not end up in the command history:
+$secure = Read-Host -AsSecureString 'Gmail app password'
 [Environment]::SetEnvironmentVariable(
     'OBS_VA_MAIL_PASSWORD',
     [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
@@ -63,38 +67,38 @@ $secure = Read-Host -AsSecureString 'Пароль приложения Gmail'
     'User')
 ```
 
-После этого перезапустите терминал и OpenCode: новые процессы читают переменные при старте.
-Не записывайте пароль в скрипты, задачи планировщика, логи или историю команд.
+Then restart the terminal and OpenCode: new processes read the variables at startup.
+Do not write the password into scripts, scheduled tasks, logs, or the command history.
 
-### 3. Закрепление адреса заказчика
+### 3. Pinning the customer address
 
-В репозитории лежит шаблон `docs/customer-questions/policy.example.json`. Скопируйте его
-в `policy.json`, укажите реальные адреса и посчитайте PIN. Файл `policy.json` добавлен
-в `.gitignore`, потому что содержит персональные данные и не должен попадать в историю.
-Порядок такой:
+The repository contains the template `docs/customer-questions/policy.example.json`. Copy it to
+`policy.json`, set the real addresses, and compute the PIN. The `policy.json` file is added to
+`.gitignore`, because it contains personal data and must not enter the history. The procedure is:
 
 ```powershell
 dotnet run --project tools/CustomerMail -- pin-hash zakazchik@example.com
 ```
 
-Полученный хеш нужно вписать в двух местах, и они обязаны совпадать:
+The resulting hash must be written in two places, and they must match:
 
-- `docs/customer-questions/policy.json` → `customerAddress` (сам адрес), `fromAddress` (ящик отправителя);
-- `tools/CustomerMail/AddressPin.cs` → `CustomerAddressSha256` (хеш).
+- `docs/customer-questions/policy.json` → `customerAddress` (the address itself), `fromAddress`
+  (the sender mailbox);
+- `tools/CustomerMail/AddressPin.cs` → `CustomerAddressSha256` (the hash).
 
-Пока PIN пуст, `send` и `fetch` отказываются работать. Это намеренно: адрес нельзя задать
-одним движением, изменение видно в diff и требует ревью пользователя.
+While the PIN is empty, `send` and `fetch` refuse to work. This is intentional: the address cannot
+be set in one move, and the change is visible in the diff and requires user review.
 
-Проверка: `dotnet run --project tools/CustomerMail -- check`.
+Check: `dotnet run --project tools/CustomerMail -- check`.
 
-## Что делать при проблемах
+## What to do when something fails
 
-| Симптом | Причина и действие |
+| Symptom | Cause and action |
 | --- | --- |
-| `PIN адреса не настроен` | Пустой `AddressPin.CustomerAddressSha256`, см. шаг 3 |
-| `Не задана переменная окружения OBS_VA_MAIL_USER` | Переменные не заданы или терминал не перезапущен |
-| `Адрес в policy.json не совпадает с закреплённым PIN` | Адрес меняли без пересчёта хеша |
-| `Отклонено: ... запрещённый фрагмент` | В вопросе есть ссылка, путь, почта, токен или код — переформулируйте вопрос |
-| `Отклонено: исчерпан лимит` | Дневной лимит писем в `policy.json` |
-| `Отклонено: партия уже была отправлена` | Идемпотентность: отправка на партию одна |
-| `SSL/TLS handshake` или `server has unexpectedly disconnected` на 465/587 | Сеть или провайдер режет исходящий SMTP на этих портах. Для Gmail рабочий обход — `port: 25` + `security: starttls`: порт 25 отдаёт STARTTLS и AUTH. Проверяется сменой `smtp` в `policy.json` |
+| `PIN адреса не настроен` (address PIN is not configured) | Empty `AddressPin.CustomerAddressSha256`, see step 3 |
+| `Не задана переменная окружения OBS_VA_MAIL_USER` (environment variable is not set) | The variables are not set or the terminal was not restarted |
+| `Адрес в policy.json не совпадает с закреплённым PIN` (address does not match the pinned PIN) | The address was changed without recomputing the hash |
+| `Отклонено: ... запрещённый фрагмент` (rejected: forbidden fragment) | The question contains a link, path, email, token, or code — rephrase the question |
+| `Отклонено: исчерпан лимит` (rejected: limit exhausted) | The daily email limit in `policy.json` |
+| `Отклонено: партия уже была отправлена` (rejected: batch was already sent) | Idempotency: one send per batch |
+| `SSL/TLS handshake` or `server has unexpectedly disconnected` on 465/587 | The network or provider cuts outgoing SMTP on these ports. For Gmail, a working workaround is `port: 25` + `security: starttls`: port 25 offers STARTTLS and AUTH. Verified by changing `smtp` in `policy.json` |

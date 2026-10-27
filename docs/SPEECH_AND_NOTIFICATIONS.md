@@ -1,45 +1,47 @@
-# Локальное русское распознавание речи
+# Local Russian speech recognition
 
-## Движок распознавания
+## Recognition engine
 
-Движок один — **Vosk** (`Speech/VoskSpeechRecognizer.cs`), и он работает полностью локально
-за интерфейсом `Speech/ISpeechRecognizer.cs`. Аудио никогда не отправляется в сеть.
+There is one engine — **Vosk** (`Speech/VoskSpeechRecognizer.cs`), and it runs fully locally behind
+the `Speech/ISpeechRecognizer.cs` interface. Audio is never sent over the network.
 
-- рассчитан на CPU: русская модель small занимает около 45 МБ;
-- короткая команда обрабатывается за доли секунды, GPU не требуется;
-- выбран потому, что Whisper на целевом ноутбуке (Ryzen 5 5600H, только встроенная
-  AMD Radeon) давал 28–48 секунд на сегмент, что несовместимо с целевыми 1–1,5 секундами.
+- designed for CPU: the small Russian model takes about 45 MB;
+- a short command is processed in fractions of a second, no GPU is required;
+- chosen because Whisper on the target laptop (Ryzen 5 5600H, integrated AMD Radeon only) took
+  28–48 seconds per segment, which is incompatible with the target of 1–1.5 seconds.
 
-Выбор движка пишется в лог строкой `Движок распознавания: ...`, а время каждой попытки —
-строкой `Распознавание заняло ... мс`.
+The engine choice is written to the log with the line `Движок распознавания: ...`, and the time of
+each attempt with the line `Распознавание заняло ... мс`.
 
-Второй движок сознательно не подключён: он тянул вторую модель, второй native runtime и
-создавал неопределённость в том, что реально работает. Если каталог модели не найден,
-распознавание отключается, а приложение остаётся в трее со статусом `нет модели распознавания`.
+A second engine is deliberately not connected: it would pull a second model and a second native
+runtime and create uncertainty about what actually works. If the model directory is not found,
+recognition is disabled and the application stays in the tray with the status
+`нет модели распознавания` (no recognition model).
 
-## Модель Vosk
+## Vosk model
 
-Каталоги моделей в `models/` не включаются в репозиторий (`models/*` в `.gitignore`).
-Приложение перебирает их по приоритету: чем крупнее модель, тем выше точность и ниже скорость.
+Model directories in `models/` are not included in the repository (`models/*` in `.gitignore`).
+The application tries them in priority order: the larger the model, the higher the accuracy and the
+lower the speed.
 
-| Приоритет | Каталог | Размер | WER: книги / YouTube / устройства |
+| Priority | Directory | Size | WER: books / YouTube / devices |
 | --- | --- | --- | --- |
-| 1 | `vosk-model-ru-0.42` | 1,8 ГБ | 4,5 / 19,5 / 17,9 |
-| 2 | `vosk-model-ru-0.22` | 1,5 ГБ | 5,7 / 20,7 / 19,7 |
-| 3 | `vosk-model-small-ru-0.22` | 45 МБ | 22,7 / 32,0 / 29,9 |
+| 1 | `vosk-model-ru-0.42` | 1.8 GB | 4.5 / 19.5 / 17.9 |
+| 2 | `vosk-model-ru-0.22` | 1.5 GB | 5.7 / 20.7 / 19.7 |
+| 3 | `vosk-model-small-ru-0.22` | 45 MB | 22.7 / 32.0 / 29.9 |
 
-Поиск идёт по списку приоритетов, а внутри — рядом с приложением, вверх по дереву каталогов
-и в текущем каталоге. Поэтому модель в корне репозитория имеет приоритет над копией в `bin`.
-Фактически выбранный каталог и время загрузки пишутся в лог строкой
-`Модель распознавания: ... (Vosk), загрузка заняла ... мс`.
+The search follows the priority list and, within it, looks next to the application, upward through the
+directory tree, and in the current directory. Therefore a model in the repository root takes priority
+over a copy in `bin`. The actually selected directory and the load time are written to the log with
+the line `Модель распознавания: ... (Vosk), загрузка заняла ... мс`.
 
-Если каталог модели отсутствует, приложение пишет ошибку в лог с перечнем ожидаемых каталогов,
-отключает распознавание и показывает статус `нет модели распознавания`.
+If the model directory is missing, the application writes an error to the log listing the expected
+directories, disables recognition, and shows the status `нет модели распознавания`.
 
-Установка модели:
+Installing the model:
 
 ```powershell
-# Докачка в цикле: соединение с alphacephei.com обрывается на больших файлах.
+# Resume in a loop: the connection to alphacephei.com drops on large files.
 $url = 'https://alphacephei.com/vosk/models/vosk-model-ru-0.42.zip'
 $out = '.\models\vosk-model-ru-0.42.zip'
 for ($i = 1; $i -le 500; $i++) {
@@ -49,251 +51,269 @@ for ($i = 1; $i -le 500; $i++) {
 Expand-Archive -Path $out -DestinationPath '.\models' -Force
 ```
 
-Совместимость: пакет `Vosk` в NuGet заканчивается версией `0.3.38`, поэтому подходят только
-модели формата Kaldi с этого списка. Модели Zipformer2 с HuggingFace
-(`alphacep/vosk-model-small-ru`, `alphacep/vosk-model-small-streaming-ru`) требуют Vosk 0.54+
-и не загрузятся.
+Compatibility: the NuGet package `Vosk` ends at version `0.3.38`, so only Kaldi-format models from
+this list are suitable. Zipformer2 models from HuggingFace (`alphacep/vosk-model-small-ru`,
+`alphacep/vosk-model-small-streaming-ru`) require Vosk 0.54+ and will not load.
 
-Нативные библиотеки `libvosk.dll` и зависимости поставляет пакет `Vosk` версии `0.3.38`.
+The native libraries `libvosk.dll` and its dependencies are supplied by the `Vosk` package version
+`0.3.38`.
 
-## Словарь команд и устойчивость распознавания
+## Command vocabulary and recognition robustness
 
-- Словарь формулировок и канонические слова хранятся в одном месте — `Commands/CommandVocabulary.cs`.
-  Список намеренно широкий (прямой и обратный порядок слов), чтобы не заставлять пользователя
-  подстраивать речь под приложение.
-- Сначала фраза сравнивается целиком со словарной (после нормализации регистра, `ё→е`
-  и пунктуации). Точное совпадение — основной и самый безопасный путь.
-- Затем допускается детерминированное исправление **отдельного слова** по словарю канонических
-  слов: слово длиной 4–7 букв — не более 1 ошибки, от 8 букв — не более 2; слова из 3 букв
-  и короче не исправляются. Так «остонови запись» превращается в «останови запись».
-- Если правки одного слова недостаточно, включается посимвольное сравнение всей фразы
-  (расстояние Левенштейна). Оно ловит перестановки, слияния и сильные искажения:
+- The phrasing dictionary and canonical words are stored in one place —
+  `Commands/CommandVocabulary.cs`. The list is deliberately wide (direct and reverse word order) so
+  that the user does not have to adapt speech to the application.
+- First, the phrase is compared as a whole with the dictionary (after normalizing case, `ё→е`, and
+  punctuation). An exact match is the primary and safest path.
+- Then a deterministic correction of a **single word** against the dictionary of canonical words is
+  allowed: a word of 4–5 letters — at most 1 error, 6–7 letters — at most 2, 8+ letters — at most 3;
+  words of 3 letters and shorter are not corrected. This turns «остонови запись» into
+  «останови запись», and «выключи бразуер» into «выключи браузер».
+- If correcting one word is not enough, a character-by-character comparison of the whole phrase is
+  enabled (Levenshtein distance). It catches transpositions, merges, and strong distortions:
   «нашли запись» → «начни запись», «начни с три» → «начни стрим», «основании запись» →
-  «останови запись». Ограничения:
-  - до 3 правок на всю фразу;
-  - больше 3 правок — только если расходится первый глагол, а все остальные слова совпали
-    точно и команда однозначна («основании запись»);
-  - лишние слова не игнорируются: «включи музыку потише» и «начни запись видео» остаются
-    нераспознанными;
-  - слияние или разделение соседних слов допускается только при точном совпадении остальной
-    фразы: «с три» → «стрим», «навстречу» → «на стриме»;
-  - во фразе должно быть хотя бы одно каноническое слово, а отрицание отклоняет фразу целиком;
-  - изменённые слова должны быть похожи: первый глагол — не короче 5 букв или отличаться
-    на одну букву, остальные — иметь общий фрагмент из трёх букв. Поэтому «выключи окно»
-    не становится «выключи микро», а «это запись» — «стоп запись».
-- Решение принимается по смыслу команды, а не по слову: парсер перебирает все допустимые
-  исправления и выполняет действие, только если все варианты дают одну и ту же команду.
-  «Запису» одинаково близко к «записи» и «запись», но «останови запись» — это одна команда,
-  поэтому «останови запису» выполняется.
-- Фаззи-сопоставление не переворачивает направление глагола: «включи весь звук» не становится
-  «выключи весь звук», даже если вся остальная фраза совпала. Противоположные глаголы
-  (`включи`/`выключи`, `верни`/`заглуши`) исключаются из кандидатов до выбора команды.
-- Если варианты дают разные команды, фраза отклоняется целиком. «Ыключи браузер» одинаково близко
-  к «включи браузер» и «выключи браузер», а это противоположные действия, поэтому браузер
-  не переключится. Лучше не выполнить команду, чем выполнить обратную.
-- Микрофон — исключение из предыдущего пункта: `включи микрофон` и `выключи микрофон` означают
-  одно действие `ToggleInput`. Слово в команде не выбирает состояние, поэтому двусмысленность
-  здесь безопасна: любой вариант просто переключает микрофон. Короткая форма `мут` (а также
-  `муть` и `мьют`) делает то же самое.
-- Переключение выполняет сам OBS (`ToggleInputMute`), поэтому гонки «прочитал состояние — записал
-  обратное» нет. Новое состояние возвращается в приложение и показывается пользователю
-  уведомлением `Микрофон выключен` / `Микрофон включён`.
-- Личная музыка устроена как микрофон: `выключи музыку`, `выключи мою музыку`, `включи личную
-  музыку` переключают источник `PersonalMusic`. Слово в команде не предсказывает результат,
-  поэтому уведомление показывает фактическое состояние: `Личная музыка выключена` /
+  «останови запись». The limits are:
+  - up to 4 edits for the whole phrase;
+  - more than 4 (up to 6) edits — only if the first verb differs, all other words match exactly, and
+    the command is unambiguous («основании запись»);
+  - one leading or trailing extra word of 4+ letters may be dropped if the rest of the phrase is
+    recognized unambiguously: «блин включи микрофон», «начни запись видео». Direction and intensity
+    words (`потише`, `громче`, `тише`, `совсем`, `меньше`, `больше`) are not dropped, so
+    «включи музыку потише» stays unrecognized;
+  - merging or splitting adjacent words is allowed only when the rest of the phrase matches exactly:
+    «с три» → «стрим», «навстречу» → «на стриме»;
+  - the phrase must contain at least one canonical word, and a negation rejects the whole phrase;
+  - changed words must be similar: the first verb — at least 5 letters or one letter different, the
+    others — must share a common three-letter fragment. Therefore «выключи окно» does not become
+    «выключи микро», and «это запись» does not become «стоп запись».
+- The decision is made by the meaning of the command, not by a word: the parser iterates over all
+  allowed corrections and executes the action only if all variants produce the same command.
+  «Запису» is equally close to «записи» and «запись», but «останови запись» is one command, so
+  «останови запису» is executed.
+- Fuzzy matching does not flip the verb direction: «включи весь звук» does not become
+  «выключи весь звук», even if the rest of the phrase matches. Opposite verbs
+  (`включи`/`выключи`, `верни`/`заглуши`) are excluded from the candidates before the command is
+  chosen.
+- If the variants produce different commands, the phrase is rejected as a whole. «Ыключи браузер» is
+  equally close to «включи браузер» and «выключи браузер», and these are opposite actions, so the
+  browser is not toggled. It is better not to execute a command than to execute the opposite one.
+- The microphone is an exception to the previous point: `включи микрофон` and `выключи микрофон`
+  mean the same action `ToggleInput`. The word in the command does not choose the state, so the
+  ambiguity is safe here: any variant simply toggles the microphone. The short form `мут` (as well as
+  `муть` and `мьют`) does the same.
+- The toggle is performed by OBS itself (`ToggleInputMute`), so there is no “read state — write the
+  opposite” race. The new state is returned to the application and shown to the user with the
+  notification `Микрофон выключен` / `Микрофон включён`.
+- Personal music works like the microphone: `выключи музыку`, `выключи мою музыку`,
+  `включи личную музыку` toggle the `PersonalMusic` source. The word in the command does not predict
+  the result, so the notification shows the actual state: `Личная музыка выключена` /
   `Личная музыка включена`.
-- Музыка стрима устроена как браузер: `выключи музыку стрима`, `включи звук стрима` — явные
-  mute/unmute источника `StreamMusic`. Ключевое слово — «стрим»: без «музыки» или «звука»
-  `выключи стрим` остаётся остановкой трансляции, а `выключи музыку` относится к личной музыке.
-- `ол мут` (а также `all mute`, `выключи весь звук`, `заглуши все`) выключает звук у всех
-  аудиоисточников OBS, а не только у четырёх настроенных ролей. Видеоисточники без звука
-  пропускаются: OBS отвечает на них ошибкой 604, и это не считается сбоем. В уведомлении
-  показывается количество выключенных источников, а если часть источников не удалось
-  выключить — их имена.
-- Слова-заполнители (`пожалуйста`, `давай`, `ну`, `сейчас` и подобные) удаляются перед сопоставлением.
-- Фраза с отрицанием (`не`, `ни`, `нельзя`) не выполняется вообще, чтобы «не начни запись»
-  не стало «начни запись».
-- Если исправление сработало, в лог пишется `Исправлено распознавание: «остонови»→«останови»`.
-  Для правки всей фразы в лог попадает пара целиком: `«нашли запись»→«начни запись»`.
-  Оригинальный текст при этом тоже остаётся в логе строкой `Vosk распознал: ...`.
-- Имена OBS-источников исправлениям **не** подвергаются: они берутся только из настроек и должны
-  совпадать с OBS точно.
-- Одиночное слово `стрим` не выполняет действие: это защищает от случайного запуска
-  или остановки трансляции.
-- Vosk не угадывает команды: на тишине и музыке он не выдаёт текст, а случайные слова
-  отсекаются порогом и проверками парсера до вызова OBS/Twitch. Проверено: 2 секунды тишины
-  дают пустой результат `{"text": ""}`; на реальном журнале из 313 нераспознанных фраз
-  фаззи-сопоставление не добавило ни одного ложного срабатывания на фоновой речи.
-- Опасные команды по-прежнему требуют подтверждения через Windows Toast.
+- Stream music works like the browser: `выключи музыку стрима`, `включи звук стрима` are explicit
+  mute/unmute of the `StreamMusic` source. The key word is “стрим”: without “музыки” or “звука”,
+  `выключи стрим` remains stopping the broadcast, and `выключи музыку` refers to personal music.
+- `ол мут` (as well as `all mute`, `выключи весь звук`, `заглуши все`) mutes every OBS audio source,
+  not only the four configured roles. Video-only sources are skipped: OBS answers them with error
+  604, and this is not considered a failure. The notification shows the number of muted sources, and
+  if some sources could not be muted — their names.
+- Filler words (`пожалуйста`, `давай`, `ну`, `сейчас`, and similar) are removed before matching.
+- A phrase with a negation (`не`, `ни`, `нельзя`) is not executed at all, so «не начни запись» does
+  not become «начни запись».
+- If a correction worked, the log gets `Исправлено распознавание: «остонови»→«останови»`. For a
+  whole-phrase correction, the full pair is written: `«нашли запись»→«начни запись»`. The original
+  text also stays in the log with the line `Vosk распознал: ...`.
+- OBS source names are **not** subject to corrections: they are taken only from settings and must
+  match OBS exactly.
+- The single word `стрим` performs no action: this protects against accidentally starting or
+  stopping the broadcast.
+- Vosk does not guess commands: on silence and music it produces no text, and random words are cut
+  off by the threshold and parser checks before any OBS/Twitch call. Verified: 2 seconds of silence
+  produce the empty result `{"text": ""}`; on a real log of 313 unrecognized phrases, fuzzy matching
+  added no false positives on background speech.
+- Dangerous commands still require confirmation through Windows Toast.
 
-## Громкость
+## Volume
 
-Команда изменения громкости имеет отдельную форму, потому что число и цель меняются:
+The volume command has a separate form because the number and the target vary:
 
-- `громкость микрофона плюс 10`, `громкость музыки минус 5`, `громкость браузера плюс пятнадцать`;
-- `громкость музыки стрима плюс 10`, `громкость звука стрима минус 5`;
-- `громкость +10` / `громкость -5` без цели — микрофон;
-- `громкость музыки плюс` или `громкость музыки тише` без числа — шаг 10.
+- `громкость микрофона плюс 10`, `громкость музыки минус 5`,
+  `громкость браузера плюс пятнадцать`;
+- `громкость музыки стрима плюс 10`, `громкость звука стрима минус 5`,
+  `громкость стрима минус 10`;
+- `громкость +10` / `громкость -5` without a target — the microphone;
+- `громкость музыки плюс` or `громкость музыки тише` without a number — step 10;
+- `меньше громкость микрофоном`, `тише громкость музыки`, `больше громкость браузером` — a
+  direction before the word `громкость`, without a number the step is 10;
+- an extra word before the command does not interfere: `чем громкость плюс десять` — microphone +10.
 
-Число можно сказать цифрами или словами, с `процентов` и без. Ошибка в числительном
-исправляется, только если ближайшее число однозначно: «десеть» — это 10, а слово, одинаково
-близкое к «десять» и «девять», фразу отклоняет. Диапазон — 0–100%: на 95% команда `плюс 10`
-даёт 100%, на 3% команда `минус 10` — 0%. Абсолютных значений (`громкость микрофона 50`)
-и произвольных источников по имени нет: цель — одна из четырёх ролей, «музыка» без уточнения
-означает личную музыку. Команда не требует подтверждения, уведомление показывает фактическое
-значение: `Громкость микрофона 60%`.
+The number can be spoken as digits or words, with or without `процентов`. A numeral error is
+corrected only if the nearest number is unambiguous: «десеть» is 10, while a word equally close to
+«десять» and «девять» rejects the phrase. For persistent Vosk errors, targeted substitutions are
+added: `стрела → стрима` and `стал → сто`. They apply only in volume commands and do not enable
+general fuzzy matching. The range is 0–100%: at 95% the command `плюс 10` gives 100%, at 3% the
+command `минус 10` gives 0%. There are no absolute values (`громкость микрофона 50`) and no
+arbitrary sources by name: the target is one of the four roles, and “музыка” without a qualifier
+means personal music. The command requires no confirmation, and the notification shows the actual
+value: `Громкость микрофона 60%`.
 
-## Как добавить новую формулировку
+## How to add a new phrasing
 
-Нераспознанная фраза не теряется: в логе остаются сама фраза и ближайшая словарная.
+An unrecognized phrase is not lost: the phrase itself and the nearest dictionary phrase stay in the
+log.
 
 ```text
 Команда не распознана: «стоп записи» (ближайшая фраза: «стоп запись» → StopRecording).
 ```
 
-Готовую строку `new(...)` лог не печатает. Для коротких и неоднозначных слов решение
-принимает человек: «мод» или «не» не должны автоматически становиться командами только
-потому, что они близки к «мут».
+The log does not print a ready-made `new(...)` line. For short and ambiguous words, a human makes the
+decision: «мод» or «не» must not automatically become commands just because they are close to «мут».
 
-Порядок действий:
+Procedure:
 
-1. Открыть `src/ObsVoiceAssistant/Commands/CommandVocabulary.cs`.
-2. Для микрофона, браузера, личной музыки и музыки стрима фразы руками не перечисляются:
-   они собираются из `AudioTargets` (источники) и `OffVerbs`/`OnVerbs` (глаголы), в прямом
-   и обратном порядке. Новый глагол — одна строка в списке, и он сразу работает со всеми
-   источниками: поэтому `замуть браузер` не требует отдельной строки.
-3. Если форма не сводится к «глагол + источник» (например, `выключи звук микрофона`),
-   добавьте её в `ExplicitPhrases` с третьим аргументом-источником:
+1. Open `src/ObsVoiceAssistant/Commands/CommandVocabulary.cs`.
+2. For the microphone, browser, personal music, and stream music, phrases are not listed by hand:
+   they are assembled from `AudioTargets` (sources) and `OffVerbs`/`OnVerbs` (verbs), in direct and
+   reverse order. A new verb is one line in the list, and it immediately works with all sources: that
+   is why `замуть браузер` needs no separate line.
+3. If the form does not reduce to “verb + source” (for example, `выключи звук микрофона`), add it to
+   `ExplicitPhrases` with a third source argument:
    `new("выключи звук браузера", CommandIntent.MuteInput, "browser")`.
-   Массовые команды вроде `ол мут` добавляются туда же без источника:
-   `new("ол мут", CommandIntent.MuteAllAudio)`. Фактические искажения Vosk тоже
-   добавляются сюда: например, `new("начни стареем", CommandIntent.StartStream)`.
-4. Пересобрать и перезапустить. `Tokens` строится из `Phrases` автоматически.
+   Mass commands such as `ол мут` are added there without a source:
+   `new("ол мут", CommandIntent.MuteAllAudio)`. Actual Vosk distortions are also added there: for
+   example, `new("начни стареем", CommandIntent.StartStream)`.
+4. Rebuild and restart. `Tokens` is built from `Phrases` automatically.
 
-Подсказка «ближайшая фраза» в строке лога — только подсказка для человека: сама по себе
-она не выполняется. Автоматически выполняются лишь фразы, прошедшие ограниченный
-фаззи-порог выше; новую формулировку всё равно выбирает человек.
+The “nearest phrase” hint in the log line is only a hint for a human: it is not executed by itself.
+Only phrases that pass the limited fuzzy threshold above are executed automatically; a human still
+chooses the new phrasing.
 
-Тест `Vocabulary_DoesNotContainConflictingPhrases` падает, если одна и та же фраза
-приписана двум разным действиям или двум разным источникам.
+The test `Vocabulary_DoesNotContainConflictingPhrases` fails if the same phrase is assigned to two
+different actions or two different sources.
 
-## Гейт по речи и разбиение по паузе
+## Speech gate and pause-based segmentation
 
-`Audio/SpeechActivityDetector.cs` считает энергию 16-битного PCM и решает, есть ли речь.
-На этом построены две вещи:
+`Audio/SpeechActivityDetector.cs` computes the energy of 16-bit PCM and decides whether there is
+speech. Two things are built on this:
 
-1. **Разбиение записи по речи** (`Audio/ContinuousListeningService.cs`): приложение ждёт начало
-   фразы, а затем завершает запись по паузе. Фраза не разрезается границей фиксированного
-   сегмента и уходит на распознавание сразу после окончания речи.
-   Значения по умолчанию: проверка каждые 60 мс, пауза окончания фразы 1000 мс, максимум 12 с
-   самой речи, минимальная длина речи 150 мс, ожидание начала речи 4 с.
-   Пауза и верхняя граница увеличены сознательно: потерянная команда дороже нескольких десятых
-   секунды задержки.
-2. **Финальный гейт** (`Speech/VoiceCommandPipeline.cs`): если в записи всё-таки нет речи,
-   распознавание пропускается — в лог пишется `Запись без речи: распознавание пропущено`.
-   Гейт остаётся страховкой и экономит процессор на тишине. Сравнивается самый громкий участок
-   записи, а не средний уровень: длинная пауза перед фразой больше не «размывает» тихую команду.
+1. **Segmentation of the recording by speech** (`Audio/ContinuousListeningService.cs`): the
+   application waits for the start of a phrase and then ends the recording on a pause. A phrase is
+   not cut by a fixed-segment boundary and goes to recognition right after speech ends.
+   Defaults: check every 60 ms, end-of-phrase pause 1000 ms, maximum speech 12 s, minimum speech
+   length 150 ms, wait for speech start 4 s. The pause and the upper bound are increased
+   deliberately: a lost command costs more than a few tenths of a second of latency.
+2. **Final gate** (`Speech/VoiceCommandPipeline.cs`): if the recording still contains no speech,
+   recognition is skipped — the log gets `Запись без речи: распознавание пропущено`. The gate
+   remains a safety net and saves CPU on silence. The loudest part of the recording is compared, not
+   the average level: a long pause before a phrase no longer “blurs” a quiet command.
 
-Порог RMS — 200. Он намеренно низкий, чтобы не глотать тихую речь: ложное срабатывание
-безопасно, потому что точный парсер не выполнит команду по случайным словам.
+The RMS threshold is 200. It is deliberately low so as not to swallow quiet speech: a false positive
+is safe, because the exact parser will not execute a command from random words.
 
-Обработка сегментов идёт отдельно от записи: пока распознаётся предыдущая команда, микрофон
-продолжает слушать, поэтому фраза, сказанная сразу после предыдущей, не теряется. Команды
-при этом выполняются строго по очереди.
+Segment processing runs separately from recording: while the previous command is being recognized,
+the microphone keeps listening, so a phrase said right after the previous one is not lost. Commands
+are executed strictly one at a time.
 
-### Потеря команды: что видно в логе
+### Losing a command: what you see in the log
 
-Раньше непонятный текст отбрасывался молча. Теперь на каждый такой случай есть строка:
+Previously, unclear text was discarded silently. Now every such case has a line:
 
-| Ситуация | Строка в логе |
+| Situation | Log line |
 | --- | --- |
-| Речь была, но движок не дал текста | `Речь была, но текст не распознан` + компактная панель `Не расслышал команду` |
-| Текст получен, но не совпал с командой | `Команда не распознана: «...»` + ближайшая фраза, если она есть; компактная панель `Команда не распознана` |
-| Команда распознана, но OBS/Twitch вернули ошибку | `Ошибка выполнения ...` + панель уведомления без значка |
+| There was speech, but the engine produced no text | `Речь была, но текст не распознан` + the compact panel `Не расслышал команду` |
+| In continuous “Бочи” listening there was a segment, but no text | `Vosk не распознал сегмент «Бочи»: <длительность> мс, пиковый RMS <значение>, байт <размер>` |
+| Text was received but did not match a command | `Команда не распознана: «...»` + the nearest phrase, if any; the compact panel `Команда не распознана` |
+| The command was recognized, but OBS/Twitch returned an error | `Ошибка выполнения ...` + a notification panel without an icon |
 
-Второй случай — основной источник «сказал, а ничего не произошло». В логе остаются
-фактическая фраза и ближайшая словарная, чтобы расширять словарь по реальным данным,
-а не по догадкам. Автоматически словарь не меняется: короткие и неоднозначные варианты
-проверяет и добавляет человек.
+The second case is the main source of “I said it, and nothing happened”. The actual phrase and the
+nearest dictionary one stay in the log so that the dictionary can be extended from real data rather
+than guesses. The dictionary does not change automatically: short and ambiguous variants are checked
+and added by a human.
 
-Внимание: громкая музыка из колонок проходит гейт по энергии. Поэтому при отладке музыку лучше
-ставить на паузу.
+For continuous “Бочи” listening, an empty result is now also visible in the log: duration, peak RMS,
+and segment size. This helps distinguish noise from missed speech: if the RMS is noticeably above the
+threshold of 200 and the duration matches a phrase, the segment is worth checking and, if necessary,
+repeating the command.
 
-## Режимы активации: Caps Lock и ключевое слово «Бочи»
+Note: loud music from speakers passes the energy gate. Therefore, when debugging, it is better to
+pause the music.
 
-Оба режима работают одновременно и независимо. Каждый использует свой поток записи
-с микрофона по умолчанию; Windows разрешает несколько одновременных записей в общем режиме.
-Проверено на целевой машине: два `WaveInEvent` за 2 секунды получили примерно по 65 КБ данных.
+## Activation modes: Caps Lock and the wake word “Бочи”
 
-Почему не один общий поток: существующий `IAudioRecorder` хранит один буфер и очищает его
-в `Stop()`. Push-to-talk останавливает запись по отпусканию клавиши, а непрерывное
-прослушивание — по паузе в речи. С общим экземпляром `Stop()` одного режима обрывал бы
-фразу другого, а `Start()` во время уже идущей записи ничего бы не делал. Два независимых
-потока дают изоляцию: пауза или ошибка одного режима не ломает второй. Если позже
-понадобится гарантированно один поток, нужен отдельный capture-сервис, который пишет
-непрерывно и раздаёт сегменты подписчикам; это отдельный рефакторинг, а не настройка.
+Both modes work simultaneously and independently. Each uses its own recording stream from the default
+microphone; Windows allows several simultaneous recordings in shared mode. Verified on the target
+machine: two `WaveInEvent` instances received about 65 KB of data each in 2 seconds.
+
+Why not one shared stream: the existing `IAudioRecorder` keeps one buffer and clears it in `Stop()`.
+Push-to-talk stops recording when the key is released, while continuous listening stops on a pause in
+speech. With a shared instance, `Stop()` from one mode would cut the phrase of the other, and
+`Start()` during an already running recording would do nothing. Two independent streams provide
+isolation: a pause or an error in one mode does not break the other. If a single stream is later
+required, a separate capture service is needed that records continuously and distributes segments to
+subscribers; that is a separate refactoring, not a setting.
 
 ### Push-to-talk
 
-- Приложение записывает микрофон, пока нажат `Caps Lock`.
-- `Caps Lock down` начинает запись, `Caps Lock up` останавливает её и запускает распознавание.
-- Обычное переключение состояния Caps Lock при работающем приложении не выполняется.
-- Записи распознаются последовательно, чтобы не вызывать Vosk параллельно.
+- The application records the microphone while `Caps Lock` is held.
+- `Caps Lock down` starts recording, `Caps Lock up` stops it and starts recognition.
+- The normal Caps Lock state toggle is not performed while the application is running.
+- Recordings are recognized sequentially so that Vosk is not called in parallel.
 
-### Ключевое слово «Бочи»
+### Wake word “Бочи”
 
-- Второй поток слушает микрофон постоянно и разбивает речь по паузам тем же
-  `ContinuousListeningService`, что и раньше.
-- «Бочи» отдельной фразой открывает окно ожидания на 6 секунд и показывает компактную
-  панель `Слушаю`. Следующая фраза в этом окне считается командой.
-- Ключевое слово распознаётся только в начале фразы; перед ним допускаются filler-слова
-  вроде `ну` или `давай`. Это защищает от ложных срабатываний на обычные слова
-  `бочка`, `бочки`, `бочке` в середине фоновой речи.
-- «Бочи, включи микрофон» выполняет команду сразу, без отдельного окна.
-- Фоновая речь без ключевого слова не выполняется и не показывает уведомлений: в лог
-  пишется только строка `Без ключевого слова, пропущено: «...»`.
-- Окно ожидания закрывается после выполнения команды, по истечении 6 секунд или при
-  нажатии `Caps Lock`: команда по кнопке отменяет ожидание.
-- Пока нажат `Caps Lock`, непрерывное прослушивание приостанавливается, а текущая фраза
-  отбрасывается. Поэтому одна и та же речь не выполняется дважды.
-- Vosk слышит «Бочи» по-разному. Точные варианты перечислены в
-  `Speech/WakeWordSession.cs` (`SpokenForms`): `бочи`, `боче`, `бочий`, `бочии`, `бочь`,
-  `боч`, `бочка`, `бочки`, `бочке`, `бочек`, `боже`. Кроме точного совпадения допускается
-  **одна** ошибка распознавания (замена, вставка или пропуск символа), но первая буква
-  должна остаться `б`: поэтому `бачи`, `боци`, `бочу`, `бочку` распознаются, а `ночи` — нет.
-  Две ошибки не допускаются. Новые точные варианты добавляются по строкам
-  `Без ключевого слова, пропущено: «...»` из лога. «Боже» — обычное междометие, поэтому
-  оно принимается только в начале фразы; при частых ложных срабатываниях его можно убрать.
-- Распознавание идёт для каждой фразы, поэтому на громкой фоновой речи расходуется CPU.
-  Это плата за активацию без отдельного движка keyword spotting; при необходимости
-  следующим шагом можно ограничить прослушивание громкостью или грамматикой Vosk.
+- The second stream listens to the microphone continuously and splits speech by pauses with the same
+  `ContinuousListeningService` as before.
+- “Бочи” as a separate phrase opens a 6-second waiting window and shows the compact panel `Слушаю`.
+  The next phrase within this window is considered a command.
+- The wake word is recognized only at the start of a phrase; filler words such as `ну` or `давай`
+  are allowed before it. This protects against false triggers on the ordinary words `бочка`,
+  `бочки`, `бочке` in the middle of background speech.
+- “Бочи, включи микрофон” executes the command immediately, without a separate window.
+- Background speech without the wake word is not executed and shows no notifications: only the line
+  `Без ключевого слова, пропущено: «...»` is written to the log.
+- The waiting window closes after the command is executed, after 6 seconds, or when `Caps Lock` is
+  pressed: a button command cancels the wait.
+- While `Caps Lock` is held, continuous listening is paused and the current phrase is discarded.
+  Therefore the same speech is not executed twice.
+- Vosk hears “Бочи” differently. The exact variants are listed in `Speech/WakeWordSession.cs`
+  (`SpokenForms`): `бочи`, `боче`, `бочий`, `бочии`, `бочь`, `боч`, `бочка`, `бочки`, `бочке`,
+  `бочек`, `боже`. Besides an exact match, **one** recognition error (substitution, insertion, or
+  deletion of a character) is allowed, but the first letter must remain `б`: therefore `бачи`,
+  `боци`, `бочу`, `бочку` are recognized, while `ночи` is not. Two errors are not allowed. New exact
+  variants are added from the `Без ключевого слова, пропущено: «...»` lines in the log. “Боже” is an
+  ordinary interjection, so it is accepted only at the start of a phrase; if false triggers are
+  frequent, it can be removed.
+- Recognition runs for every phrase, so loud background speech consumes CPU. This is the price of
+  activation without a separate keyword-spotting engine; if necessary, the next step can be to limit
+  listening by volume or by a Vosk grammar.
 
 ## Windows Toast Notifications
 
-Опасные команды (`начни стрим`, `останови запись`, `останови стрим`, изменение названия или категории Twitch)
-показывают Windows Toast с двумя действиями: `Подтвердить` и `Отмена`. Команда отправляется
-в OBS/Twitch только после `Подтвердить`; закрытие уведомления, ошибка или `Отмена` приводят к отказу.
+Dangerous commands (`начни стрим`, `останови запись`, `останови стрим`, changing the Twitch title or
+category) show a Windows Toast with two actions: `Подтвердить` and `Отмена`. The command is sent to
+OBS/Twitch only after `Подтвердить`; closing the notification, an error, or `Отмена` results in a
+refusal. For a category, a Twitch search is performed before the notification is shown; the
+confirmation text shows the exact name of the first result. The title and category receive a separate
+informational notification after a successful change. Twitch setup is described in
+[`integrations/twitch.md`](integrations/twitch.md).
 
-Отдельно от подтверждений есть информационные уведомления. Они нужны там, где итог
-нельзя понять из самой команды: переключение микрофона показывает фактическое состояние
-(`Микрофон выключен` / `Микрофон включён`), `ол мут` — сколько источников выключено,
-а ошибка выполнения — причину. Запуск записи
-подтверждается коротким уведомлением `Запись началась`, потому что выполняется без
-подтверждения. Все такие сообщения показывает панель в правом нижнем углу: тёмная
-скруглённая, без значка, без захвата фокуса, закрывается кликом. Обычная панель имеет
-ширину 380, минимальную высоту 56 и переносит длинный текст, показывается 4 секунды.
-Если фраза не распознана или текст пустой, используется компактная панель
-`Команда не распознана` или `Не расслышал команду`: 260×44, одна секунда. Размер задаёт
-приложение, а не Windows, поэтому уведомления не раздуваются до размера баллона и не
-показывают предупреждающий значок.
+Separately from confirmations, there are informational notifications. They are needed where the
+result cannot be understood from the command itself: a microphone toggle shows the actual state
+(`Микрофон выключен` / `Микрофон включён`), `ол мут` shows how many sources were muted, and an
+execution error shows the reason. Starting a recording is confirmed by a short notification
+`Запись началась`, because it runs without confirmation. All such messages are shown by a panel in
+the lower-right corner: dark, rounded, without an icon, without taking focus, closed by a click. The
+regular panel is 380 wide, has a minimum height of 56, wraps long text, and is shown for 4 seconds.
+If a phrase is not recognized or the text is empty, the compact panel `Команда не распознана` or
+`Не расслышал команду` is used: 260×44, one second. The application, not Windows, sets the size, so
+notifications do not inflate to balloon size and do not show a warning icon.
 
-Windows Toast не поддерживает ввод текста, поэтому название файла запрашивается отдельным
-маленьким окном. Оно открывается после остановки записи и после сохранения повтора — в том
-числе когда действие выполнено вручную в OBS. Введённый текст становится префиксом имени
-OBS (`Мой клип_2026-10-20 18-16-32.mkv`); пустое поле, `Esc` или закрытие окна оставляют
-имя OBS без изменений. Переименование выполняет модуль `Recordings`, оно не меняет папку и
-расширение файла и не перезаписывает существующие файлы.
+Windows Toast does not support text input, so the file name is requested by a separate small window.
+It opens after a recording is stopped and after a replay is saved — including when the action was
+performed manually in OBS. The entered text **replaces** the automatic OBS name entirely
+(`Мой клип.mkv` instead of `2026-10-20 18-16-32.mkv`); an empty field, `Esc`, or closing the window
+leaves the OBS name unchanged. The extension and folder stay from OBS, and renaming is performed by
+the `Recordings` module: it does not overwrite existing files — if the name is taken, ` (2)`, ` (3)`
+is appended.
 
-Для Toast приложение собирается с target framework `net10.0-windows10.0.22621.0`. Первичное
-тестирование нужно выполнять в интерактивной пользовательской сессии Windows, где разрешены
-уведомления для приложения.
+For Toast, the application is built with the target framework `net10.0-windows10.0.22621.0`. Initial
+testing must be performed in an interactive Windows user session where notifications are allowed for
+the application.

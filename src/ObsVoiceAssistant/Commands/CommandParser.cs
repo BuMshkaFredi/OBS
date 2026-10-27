@@ -27,7 +27,34 @@ public sealed record ParseResult(
 public sealed class CommandParser
 {
     /// <summary>Предохранитель от комбинаторного перебора вариантов исправления.</summary>
-    private const int MaxCorrectionCombinations = 256;
+    private const int MaxCorrectionCombinations = 1024;
+
+    /// <summary>
+    /// Слова направления и интенсивности. Их нельзя отбрасывать как лишние:
+    /// «включи музыку потише» не должно стать простым включением музыки.
+    /// </summary>
+    private static readonly IReadOnlySet<string> MeaningChangingModifiers =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "потише",
+            "погромче",
+            "громче",
+            "тише",
+            "совсем",
+            "быстрее",
+            "медленнее",
+            "тихо",
+            "громко",
+            "меньше",
+            "больше",
+            "убавь",
+            "прибавь",
+            "уменьши",
+            "увеличь",
+            "чуть",
+            "немного",
+            "сильно"
+        };
 
     private readonly Dictionary<string, CommandVocabulary.CommandPhrase> phraseLookup;
 
@@ -64,9 +91,32 @@ public sealed class CommandParser
         // Команда громкости имеет переменное число и цель, поэтому разбирается
         // отдельной формой, а не словарём целых фраз.
         var volume = VolumeCommandParser.TryParse(recognizedText, out var volumeCorrections);
+        if (volume is null)
+        {
+            // Vosk иногда добавляет одно слово перед командой: «чем громкость плюс десять».
+            var volumeTokens = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (volumeTokens.Length > 1 &&
+                !CommandVocabulary.Tokens.Contains(volumeTokens[0]) &&
+                !CommandVocabulary.Negations.Contains(volumeTokens[0]) &&
+                !MeaningChangingModifiers.Contains(volumeTokens[0]))
+            {
+                volume = VolumeCommandParser.TryParse(
+                    string.Join(' ', volumeTokens[1..]),
+                    out volumeCorrections);
+            }
+        }
+
         if (volume is not null)
         {
             return new ParseResult(volume, text, volumeCorrections);
+        }
+
+        // Если фраза явно начинается с «громкость», но форму команды разобрать
+        // не удалось, не пытаемся выдать её за другую команду: «громкость микрофона»
+        // не должна превращаться в переключение микрофона.
+        if (string.Equals(GetFirstToken(text), "громкость", StringComparison.Ordinal))
+        {
+            return ParseResult.NotFound(text);
         }
 
         // 1. Точное совпадение — основной и самый безопасный путь.
@@ -264,11 +314,52 @@ public sealed class CommandParser
     /// <summary>
     /// Подбирает ближайшую команду по расстоянию всей фразы. Это ловит ошибки,
     /// которые не исправляются по одному слову: «нашли запись», «начни с три»,
-    /// «основании запись». Дальние догадки ограничены: до трёх правок на всю
+    /// «основании запись». Дальние догадки ограничены: до четырёх правок на всю
     /// фразу, а больше — только когда расходится первый глагол, а остальное
     /// совпало точно. Так «включи музыку потише» не превращается в команду.
     /// </summary>
     private (ParsedCommand Command, string Phrase)? MatchFuzzy(string text)
+    {
+        var direct = MatchFuzzyCore(text);
+        if (direct is not null)
+        {
+            return direct;
+        }
+
+        var tokens = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        // Vosk иногда добавляет короткое слово перед командой: «блин включи микрофон».
+        // Слово из двух-трёх букв не убираем: «на» и «не» слишком легко меняют смысл.
+        if (tokens.Length > 1 &&
+            tokens[0].Length >= 4 &&
+            !CommandVocabulary.Tokens.Contains(tokens[0]) &&
+            !CommandVocabulary.Negations.Contains(tokens[0]) &&
+            !MeaningChangingModifiers.Contains(tokens[0]))
+        {
+            var withoutLeading = string.Join(' ', tokens[1..]);
+            var leadingMatch = MatchFuzzyCore(withoutLeading);
+            if (leadingMatch is not null)
+            {
+                return leadingMatch;
+            }
+
+            tokens = withoutLeading.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        // Иногда лишнее слово стоит в конце: «начни запись видео». Направление
+        // и интенсивность в хвосте меняют смысл, поэтому такие слова не отбрасываем.
+        if (tokens.Length > 1 &&
+            tokens[^1].Length >= 4 &&
+            !CommandVocabulary.Negations.Contains(tokens[^1]) &&
+            !MeaningChangingModifiers.Contains(tokens[^1]))
+        {
+            return MatchFuzzyCore(string.Join(' ', tokens[..^1]));
+        }
+
+        return null;
+    }
+
+    private (ParsedCommand Command, string Phrase)? MatchFuzzyCore(string text)
     {
         // Совсем короткие фразы и фразы без единого канонического слова
         // не додумываем: это почти всегда фоновая речь.
@@ -277,7 +368,7 @@ public sealed class CommandParser
             return null;
         }
 
-        const int searchLimit = 5;
+        const int searchLimit = 7;
         var inputFirst = GetFirstToken(text);
         var bestDistance = int.MaxValue;
         var bestPhrases = new List<string>();
@@ -330,8 +421,8 @@ public sealed class CommandParser
             return null;
         }
 
-        var accepted = bestDistance <= 3 ||
-            (bestDistance <= searchLimit && IsFirstTokenOnlyMismatch(text, matchedPhrase));
+        var accepted = bestDistance <= 4 ||
+            (bestDistance <= 6 && IsFirstTokenOnlyMismatch(text, matchedPhrase));
 
         return accepted
             ? (bestCommands.Values.First(), matchedPhrase)
@@ -593,8 +684,9 @@ public sealed class CommandParser
         var maxDistance = token.Length switch
         {
             <= 3 => 0,
-            <= 7 => 1,
-            _ => 2
+            <= 5 => 1,
+            <= 7 => 2,
+            _ => 3
         };
 
         if (maxDistance == 0)

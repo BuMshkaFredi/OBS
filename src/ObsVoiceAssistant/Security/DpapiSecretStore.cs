@@ -11,7 +11,7 @@ public interface IProtectedSecretStore
     void Delete(string key);
 }
 
-public sealed class DpapiSecretStore
+public sealed class DpapiSecretStore : IProtectedSecretStore
 {
     private readonly string directory;
 

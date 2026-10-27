@@ -16,6 +16,7 @@ public sealed class RecordingNamingService : IDisposable
     private readonly IRecordingNamePrompt prompt;
     private readonly Action<string> notify;
     private readonly Action<string>? log;
+    private readonly IMp4CopyService? mp4Copy;
     private readonly SemaphoreSlim promptLock = new(1, 1);
     private IObsSavedFileSource? source;
     private bool disposed;
@@ -23,11 +24,13 @@ public sealed class RecordingNamingService : IDisposable
     public RecordingNamingService(
         IRecordingNamePrompt prompt,
         Action<string> notify,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        IMp4CopyService? mp4Copy = null)
     {
         this.prompt = prompt;
         this.notify = notify;
         this.log = log;
+        this.mp4Copy = mp4Copy;
     }
 
     public void Attach(IObsSavedFileSource savedFiles)
@@ -45,23 +48,35 @@ public sealed class RecordingNamingService : IDisposable
     {
         // Два окна одновременно перекрыли бы друг друга, поэтому запросы идут по очереди.
         await promptLock.WaitAsync().ConfigureAwait(false);
+        string? finalPath;
         try
         {
-            await HandleCoreAsync(file).ConfigureAwait(false);
+            finalPath = await HandleCoreAsync(file).ConfigureAwait(false);
         }
         finally
         {
             promptLock.Release();
         }
+
+        // Конвертация идёт вне блокировки: она может занять минуты на длинной
+        // записи, и следующий файл не должен ждать её из-за окна переименования.
+        if (finalPath is not null)
+        {
+            await CreateMp4CopyAsync(finalPath, file.Kind).ConfigureAwait(false);
+        }
     }
 
-    private async Task HandleCoreAsync(ObsSavedFile file)
+    /// <summary>
+    /// Переименовывает файл и возвращает путь к готовому файлу, для которого
+    /// нужна MP4-копия. null — копировать нечего.
+    /// </summary>
+    private async Task<string?> HandleCoreAsync(ObsSavedFile file)
     {
         var fileName = Path.GetFileName(file.FilePath);
         if (string.IsNullOrWhiteSpace(fileName))
         {
             log?.Invoke($"OBS не дал имя файла {KindName(file.Kind)}: «{file.FilePath}»");
-            return;
+            return null;
         }
 
         if (!File.Exists(file.FilePath))
@@ -69,22 +84,22 @@ public sealed class RecordingNamingService : IDisposable
             // Файл могли удалить или OBS ещё не дописал его на медленный диск.
             log?.Invoke($"Файл {KindName(file.Kind)} не найден: {fileName}");
             notify($"{NotRenamedMessage(file.Kind)}: файл не найден");
-            return;
+            return null;
         }
 
-        var prefix = await prompt.AskNameAsync(file.Kind, fileName).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(prefix))
+        var enteredName = await prompt.AskNameAsync(file.Kind, fileName).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(enteredName))
         {
             log?.Invoke($"Имя {KindName(file.Kind)} не изменено: {fileName}");
-            return;
+            return file.FilePath;
         }
 
-        var sanitized = RecordingFileName.SanitizePrefix(prefix);
+        var sanitized = RecordingFileName.SanitizeName(enteredName);
         if (sanitized.Length == 0)
         {
             log?.Invoke("Имя не изменено: после очистки не осталось допустимых символов");
             notify("Название не изменено: в нём нет допустимых символов");
-            return;
+            return file.FilePath;
         }
 
         var targetPath = RecordingFileName.BuildTargetPath(file.FilePath, sanitized);
@@ -98,12 +113,62 @@ public sealed class RecordingNamingService : IDisposable
                 $"Не удалось переименовать файл {KindName(file.Kind)} {fileName}: " +
                 $"{exception.GetType().Name}: {exception.Message}");
             notify($"{NotRenamedMessage(file.Kind)}: {exception.Message}");
-            return;
+            // Файл записи всё равно готов: копию MP4 делаем из оригинала.
+            return file.FilePath;
         }
 
         var targetName = Path.GetFileName(targetPath);
         log?.Invoke($"{RenamedMessage(file.Kind)}: {fileName} -> {targetName}");
         notify($"{RenamedMessage(file.Kind)}: {targetName}");
+
+        return targetPath;
+    }
+
+    /// <summary>
+    /// Создаёт MP4-копию готового файла. Ошибка копирования не отменяет
+    /// переименование: пользователь узнает о проблеме из уведомления.
+    /// </summary>
+    private async Task CreateMp4CopyAsync(string filePath, ObsSavedFileKind kind)
+    {
+        if (mp4Copy is null)
+        {
+            return;
+        }
+
+        Mp4CopyResult result;
+        try
+        {
+            result = await mp4Copy.CreateCopyAsync(filePath).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            log?.Invoke(
+                $"Ошибка создания MP4-копии {KindName(kind)}: " +
+                $"{exception.GetType().Name}: {exception.Message}");
+            notify($"MP4-копия не создана: {exception.Message}");
+            return;
+        }
+
+        switch (result.Status)
+        {
+            case Mp4CopyStatus.Created:
+                var name = Path.GetFileName(result.TargetPath);
+                log?.Invoke($"MP4-копия создана: {name}");
+                notify($"MP4-копия создана: {name}");
+                break;
+
+            case Mp4CopyStatus.AlreadyMp4:
+                log?.Invoke($"Файл уже в MP4, копия не нужна: {Path.GetFileName(filePath)}");
+                break;
+
+            case Mp4CopyStatus.Disabled:
+                break;
+
+            default:
+                log?.Invoke($"MP4-копия не создана: {result.Error}");
+                notify($"MP4-копия не создана: {result.Error}");
+                break;
+        }
     }
 
     private static async Task MoveWithRetryAsync(string sourcePath, string targetPath)

@@ -26,8 +26,21 @@ public sealed class RecordingNamingServiceTests
         }
     }
 
+    private sealed class StubMp4CopyService : IMp4CopyService
+    {
+        public string? RequestedPath { get; private set; }
+
+        public Task<Mp4CopyResult> CreateCopyAsync(
+            string sourcePath,
+            CancellationToken cancellationToken = default)
+        {
+            RequestedPath = sourcePath;
+            return Task.FromResult(new Mp4CopyResult(Mp4CopyStatus.Created, sourcePath));
+        }
+    }
+
     [Fact]
-    public async Task HandleAsync_WhenPrefixGiven_RenamesFileAndNotifies()
+    public async Task HandleAsync_WhenNameGiven_ReplacesObsNameAndNotifies()
     {
         var directory = CreateTempDirectory();
         try
@@ -40,7 +53,7 @@ public sealed class RecordingNamingServiceTests
 
             await service.HandleAsync(new ObsSavedFile(source, ObsSavedFileKind.Recording));
 
-            var renamed = Path.Combine(directory, "Мой клип_2026-10-20 18-16-32.mkv");
+            var renamed = Path.Combine(directory, "Мой клип.mkv");
             Assert.True(File.Exists(renamed));
             Assert.False(File.Exists(source));
             Assert.Contains(notifications, message => message.Contains("Запись переименована", StringComparison.Ordinal));
@@ -54,7 +67,7 @@ public sealed class RecordingNamingServiceTests
     }
 
     [Fact]
-    public async Task HandleAsync_WhenReplaySaved_UsesSamePrefixRule()
+    public async Task HandleAsync_WhenReplaySaved_UsesSameNameRule()
     {
         var directory = CreateTempDirectory();
         try
@@ -67,7 +80,7 @@ public sealed class RecordingNamingServiceTests
 
             await service.HandleAsync(new ObsSavedFile(source, ObsSavedFileKind.Replay));
 
-            Assert.True(File.Exists(Path.Combine(directory, "Лучший момент_Replay 2026-10-20 18-16-32.mkv")));
+            Assert.True(File.Exists(Path.Combine(directory, "Лучший момент.mkv")));
             Assert.Contains(notifications, message => message.Contains("Повтор переименован", StringComparison.Ordinal));
             Assert.Equal(ObsSavedFileKind.Replay, prompt.Kind);
         }
@@ -114,7 +127,7 @@ public sealed class RecordingNamingServiceTests
 
             await service.HandleAsync(new ObsSavedFile(source, ObsSavedFileKind.Replay));
 
-            Assert.True(File.Exists(Path.Combine(directory, "клип_финал_1_Replay 2026-10-20 18-16-32.mkv")));
+            Assert.True(File.Exists(Path.Combine(directory, "клип_финал_1.mkv")));
         }
         finally
         {
@@ -129,7 +142,7 @@ public sealed class RecordingNamingServiceTests
         try
         {
             var source = Path.Combine(directory, "2026-10-20 18-16-32.mkv");
-            var existing = Path.Combine(directory, "Мой клип_2026-10-20 18-16-32.mkv");
+            var existing = Path.Combine(directory, "Мой клип.mkv");
             await File.WriteAllTextAsync(source, "new");
             await File.WriteAllTextAsync(existing, "old");
             var service = new RecordingNamingService(new StubPrompt("Мой клип"), _ => { });
@@ -137,7 +150,7 @@ public sealed class RecordingNamingServiceTests
             await service.HandleAsync(new ObsSavedFile(source, ObsSavedFileKind.Recording));
 
             Assert.Equal("old", await File.ReadAllTextAsync(existing));
-            Assert.True(File.Exists(Path.Combine(directory, "Мой клип_2026-10-20 18-16-32 (2).mkv")));
+            Assert.True(File.Exists(Path.Combine(directory, "Мой клип (2).mkv")));
         }
         finally
         {
@@ -160,6 +173,59 @@ public sealed class RecordingNamingServiceTests
 
             Assert.False(prompt.WasAsked);
             Assert.Contains(notifications, message => message.Contains("не найден", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenFileRenamed_CreatesMp4CopyOfFinalFile()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var source = Path.Combine(directory, "2026-10-20 18-16-32.mkv");
+            await File.WriteAllTextAsync(source, "video");
+            var notifications = new List<string>();
+            var mp4Copy = new StubMp4CopyService();
+            var service = new RecordingNamingService(
+                new StubPrompt("Мой клип"),
+                notifications.Add,
+                mp4Copy: mp4Copy);
+
+            await service.HandleAsync(new ObsSavedFile(source, ObsSavedFileKind.Recording));
+
+            // Копия делается уже от переименованного файла, чтобы имя совпадало.
+            Assert.Equal(
+                Path.Combine(directory, "Мой клип.mkv"),
+                mp4Copy.RequestedPath);
+            Assert.Contains(notifications, message => message.Contains("MP4-копия создана", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenNameIsEmpty_StillCreatesMp4CopyOfObsFile()
+    {
+        var directory = CreateTempDirectory();
+        try
+        {
+            var source = Path.Combine(directory, "2026-10-20 18-16-32.mkv");
+            await File.WriteAllTextAsync(source, "video");
+            var mp4Copy = new StubMp4CopyService();
+            var service = new RecordingNamingService(
+                new StubPrompt(null),
+                _ => { },
+                mp4Copy: mp4Copy);
+
+            await service.HandleAsync(new ObsSavedFile(source, ObsSavedFileKind.Recording));
+
+            Assert.Equal(source, mp4Copy.RequestedPath);
         }
         finally
         {
