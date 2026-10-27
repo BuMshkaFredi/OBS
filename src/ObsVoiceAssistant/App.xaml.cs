@@ -6,6 +6,7 @@ using ObsVoiceAssistant.Audio;
 using ObsVoiceAssistant.Commands;
 using ObsVoiceAssistant.Configuration;
 using ObsVoiceAssistant.Diagnostics;
+using ObsVoiceAssistant.Integrations.Media;
 using ObsVoiceAssistant.Integrations.Obs;
 using ObsVoiceAssistant.Integrations.Twitch;
 using ObsVoiceAssistant.Notifications;
@@ -398,7 +399,8 @@ public partial class App : System.Windows.Application
         commandDispatcher = new CommandDispatcher(
             new ObsCommandPortAdapter(obsClient, inputResolver),
             twitchService?.CommandPort ?? new NullTwitchCommandPort(),
-            new ConfirmationPolicy());
+            new ConfirmationPolicy(),
+            new WindowsMediaPlaybackControl());
 
         // Без распознавания соединение с OBS всё равно нужно: Replay Buffer и статус в трее.
         if (speechRecognizer is not null)

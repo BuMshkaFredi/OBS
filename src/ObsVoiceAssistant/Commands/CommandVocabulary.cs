@@ -311,6 +311,14 @@ public static class CommandVocabulary
         new("буфер включи", CommandIntent.StartReplayBuffer),
         new("буфер повторов запусти", CommandIntent.StartReplayBuffer),
 
+        // Яндекс Музыка: отдельная команда переключает трек, не меняя источник OBS.
+        new("следующий трек", CommandIntent.NextMusicTrack),
+        new("следующая песня", CommandIntent.NextMusicTrack),
+        new("переключи трек", CommandIntent.NextMusicTrack),
+        new("переключить трек", CommandIntent.NextMusicTrack),
+        new("смени трек", CommandIntent.NextMusicTrack),
+        new("сменить трек", CommandIntent.NextMusicTrack),
+
         // Источники: микрофон и браузер.
         // «Включи» и «выключи» для микрофона — одно действие: переключение состояния.
         // Браузер сохраняет явный смысл: включить или выключить.

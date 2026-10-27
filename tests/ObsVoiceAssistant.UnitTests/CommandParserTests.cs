@@ -61,6 +61,19 @@ public sealed class CommandParserTests
         Assert.Equal("just chatting", result.Argument);
     }
 
+    [Theory]
+    [InlineData("следующий трек")]
+    [InlineData("переключи трек")]
+    [InlineData("следующая песня")]
+    [InlineData("смени трек")]
+    public void Parse_NextMusicTrack_ReturnsExpectedIntent(string text)
+    {
+        var result = parser.Parse(text);
+
+        Assert.NotNull(result);
+        Assert.Equal(CommandIntent.NextMusicTrack, result.Intent);
+    }
+
     [Fact]
     public void Parse_LoneStreamWord_ReturnsNull()
     {

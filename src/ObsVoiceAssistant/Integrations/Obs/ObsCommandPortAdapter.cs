@@ -14,4 +14,9 @@ public sealed class ObsCommandPortAdapter : IObsCommandPort
 
     public Task<string?> ExecuteAsync(ParsedCommand command, CancellationToken cancellationToken = default) =>
         adapter.ExecuteAsync(command, cancellationToken);
+
+    public Task<InputToggleResult> ToggleInputAsync(
+        ParsedCommand command,
+        CancellationToken cancellationToken = default) =>
+        adapter.ToggleInputAsync(command, cancellationToken);
 }

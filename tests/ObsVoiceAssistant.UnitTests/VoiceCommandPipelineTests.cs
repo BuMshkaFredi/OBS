@@ -429,12 +429,22 @@ public sealed class VoiceCommandPipelineTests
     {
         public Task<string?> ExecuteAsync(ParsedCommand command, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException(message);
+
+        public Task<InputToggleResult> ToggleInputAsync(
+            ParsedCommand command,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException(message);
     }
 
     private sealed class OutcomePort(string outcome) : IObsCommandPort
     {
         public Task<string?> ExecuteAsync(ParsedCommand command, CancellationToken cancellationToken = default) =>
             Task.FromResult<string?>(outcome);
+
+        public Task<InputToggleResult> ToggleInputAsync(
+            ParsedCommand command,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new InputToggleResult(outcome, null));
     }
 
     private static VoiceCommandPipeline CreatePipeline(string text, RecordingPort port, bool confirmed) =>
@@ -493,6 +503,14 @@ public sealed class VoiceCommandPipelineTests
         {
             LastCommand = command;
             return Task.FromResult<string?>(null);
+        }
+
+        public Task<InputToggleResult> ToggleInputAsync(
+            ParsedCommand command,
+            CancellationToken cancellationToken = default)
+        {
+            LastCommand = command;
+            return Task.FromResult(new InputToggleResult(null, null));
         }
     }
 }

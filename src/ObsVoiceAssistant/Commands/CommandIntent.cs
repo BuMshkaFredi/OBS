@@ -14,7 +14,8 @@ public enum CommandIntent
     MuteAllAudio,
     SetStreamTitle,
     SetStreamCategory,
-    AdjustInputVolume
+    AdjustInputVolume,
+    NextMusicTrack
 }
 
 public sealed record ParsedCommand(

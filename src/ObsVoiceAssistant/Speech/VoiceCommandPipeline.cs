@@ -205,6 +205,7 @@ public sealed class VoiceCommandPipeline
         CommandIntent.MuteAllAudio => "выключить весь звук",
         CommandIntent.SetStreamTitle => "изменить название",
         CommandIntent.SetStreamCategory => "изменить категорию",
+        CommandIntent.NextMusicTrack => "следующий трек",
         _ => command.Intent.ToString()
     };
 

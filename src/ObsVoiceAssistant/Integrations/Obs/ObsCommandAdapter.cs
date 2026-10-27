@@ -66,7 +66,7 @@ public sealed class ObsCommandAdapter : IObsCommandPort
             CommandIntent.SaveReplay => Run(client.SaveReplayAsync(cancellationToken)),
             CommandIntent.MuteInput => Run(SetMuteAsync(command, true, cancellationToken)),
             CommandIntent.UnmuteInput => Run(SetMuteAsync(command, false, cancellationToken)),
-            CommandIntent.ToggleInput => ToggleMuteAsync(command, cancellationToken),
+            CommandIntent.ToggleInput => ToggleMuteMessageAsync(command, cancellationToken),
             CommandIntent.AdjustInputVolume => AdjustVolumeAsync(command, cancellationToken),
             CommandIntent.MuteAllAudio => MuteAllAudioAsync(cancellationToken),
             _ => throw new InvalidOperationException($"Intent {command.Intent} is not an OBS command.")
@@ -82,12 +82,24 @@ public sealed class ObsCommandAdapter : IObsCommandPort
     /// Переключает состояние источника. Сообщение о результате нужно потому,
     /// что при переключении формулировка команды не предсказывает итог.
     /// </summary>
-    private async Task<string?> ToggleMuteAsync(ParsedCommand command, CancellationToken cancellationToken)
+    public async Task<InputToggleResult> ToggleInputAsync(
+        ParsedCommand command,
+        CancellationToken cancellationToken = default)
     {
         var inputName = ResolveInputName(command);
         var muted = await client.ToggleInputMuteAsync(inputName, cancellationToken).ConfigureAwait(false);
 
-        return DescribeToggleResult(command.Target, inputName, muted);
+        return new InputToggleResult(
+            DescribeToggleResult(command.Target, inputName, muted),
+            muted);
+    }
+
+    private async Task<string?> ToggleMuteMessageAsync(
+        ParsedCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await ToggleInputAsync(command, cancellationToken).ConfigureAwait(false);
+        return result.Message;
     }
 
     /// <summary>
