@@ -1,8 +1,8 @@
 {
   "id": "REL-002",
-  "status": "draft",
+  "status": "approved",
   "createdAt": "2026-10-31",
-  "approvedAt": null,
+  "approvedAt": "2026-10-31",
   "subject": "OBS Voice Assistant — сборка 0.2.0 для проверки",
   "releaseUrl": "https://github.com/BuMshkaFredi/OBS/releases/tag/v0.2.0",
   "downloadUrl": "https://github.com/BuMshkaFredi/OBS/releases/download/v0.2.0/ObsVoiceAssistant-0.2.0-win-x64.zip",
