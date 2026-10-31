@@ -82,9 +82,6 @@ public sealed class TwitchViewerCountProviderTests
                 ? Task.FromResult(status!)
                 : Task.FromException<TwitchStreamStatus>(failure);
 
-        public Task UpdateTitleAsync(string title, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
         public Task UpdateCategoryAsync(string gameId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

@@ -385,66 +385,6 @@ public sealed class VoiceCommandPipelineTests
             message => message.Contains("Не удалось найти категорию", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task Title_IsPreparedBeforeConfirmationAndDispatch()
-    {
-        var twitch = new PreparingTitleTwitchPort();
-        var confirmation = new FakeConfirmationService(true);
-        var notified = new List<string>();
-        var pipeline = new VoiceCommandPipeline(
-            new FakeRecognizer("измени название стрима на Вечерний ranked"),
-            new CommandParser(),
-            new CommandDispatcher(new RecordingPort(), twitch, new ConfirmationPolicy()),
-            confirmation,
-            notify: notified.Add);
-
-        await pipeline.ProcessAsync(CreateRecording());
-
-        Assert.Equal("Вечерний ranked !tg", confirmation.LastCommand?.Argument);
-        Assert.Equal("Вечерний ranked !tg", twitch.LastCommand?.Argument);
-        Assert.Contains(notified, message => message.Contains("!tg", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task Title_PrepareFailure_NotifiesAndDoesNotAskForConfirmation()
-    {
-        var twitch = new FailingPrepareTwitchPort();
-        var confirmation = new FakeConfirmationService(true);
-        var notified = new List<string>();
-        var pipeline = new VoiceCommandPipeline(
-            new FakeRecognizer("измени название стрима на Вечерний"),
-            new CommandParser(),
-            new CommandDispatcher(new RecordingPort(), twitch, new ConfirmationPolicy()),
-            confirmation,
-            notify: notified.Add);
-
-        await pipeline.ProcessAsync(CreateRecording());
-
-        Assert.Null(confirmation.LastCommand);
-        Assert.Null(twitch.LastCommand);
-        Assert.Contains(
-            notified,
-            message => message.Contains("название", StringComparison.Ordinal));
-    }
-
-    private sealed class PreparingTitleTwitchPort : ITwitchCommandPort
-    {
-        public ParsedCommand? LastCommand { get; private set; }
-
-        public Task<ParsedCommand> PrepareAsync(
-            ParsedCommand command,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(command with { Argument = $"{command.Argument} !tg" });
-
-        public Task<string?> ExecuteAsync(
-            ParsedCommand command,
-            CancellationToken cancellationToken = default)
-        {
-            LastCommand = command;
-            return Task.FromResult<string?>($"Название изменено: «{command.Argument}»");
-        }
-    }
-
     private sealed class PreparingTwitchPort : ITwitchCommandPort
     {
         public ParsedCommand? LastCommand { get; private set; }

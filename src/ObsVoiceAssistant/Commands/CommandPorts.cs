@@ -45,6 +45,12 @@ public interface IMediaPlaybackControl
 {
     Task<MediaPlaybackResult> PauseAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Снимает с паузы уже запущенный плеер. Не запускает воспроизведение с нуля:
+    /// если трек не выбран или плеер не играл, результат будет ошибкой плеера.
+    /// </summary>
+    Task<MediaPlaybackResult> ResumeAsync(CancellationToken cancellationToken = default);
+
     Task<MediaPlaybackResult> NextTrackAsync(CancellationToken cancellationToken = default);
 }
 
@@ -71,7 +77,6 @@ public sealed class ConfirmationPolicy : IConfirmationPolicy
         CommandIntent.StartStream => true,
         CommandIntent.StopRecording => true,
         CommandIntent.StopStream => true,
-        CommandIntent.SetStreamTitle => true,
         CommandIntent.SetStreamCategory => true,
         _ => false
     };

@@ -83,7 +83,7 @@ public sealed class ContinuousListeningService : IAsyncDisposable
     /// </summary>
     public void Suspend() => Interlocked.Exchange(ref suspended, 1);
 
-    /// <summary>Возвращает непрерывное прослушивание после отпускания Caps Lock.</summary>
+    /// <summary>Возвращает непрерывное прослушивание после отпускания клавиши push-to-talk.</summary>
     public void Resume() => Interlocked.Exchange(ref suspended, 0);
 
     public bool IsSuspended => Volatile.Read(ref suspended) == 1;
@@ -120,7 +120,7 @@ public sealed class ContinuousListeningService : IAsyncDisposable
             if (IsSuspended)
             {
                 // Пока микрофон занят Push-to-talk, запись не держим: иначе
-                // в сегмент попадёт речь, которую уже записал Caps Lock.
+                // в сегмент попадёт речь, которую уже записала клавиша push-to-talk.
                 await Task.Delay(options.PollInterval, cancellation.Token).ConfigureAwait(false);
                 continue;
             }

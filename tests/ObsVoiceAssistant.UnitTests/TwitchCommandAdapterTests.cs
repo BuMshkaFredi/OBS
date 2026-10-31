@@ -19,7 +19,27 @@ public sealed class TwitchCommandAdapterTests
 
         Assert.Equal("Counter-Strike 2", prepared.Argument);
         Assert.Equal("game-1", prepared.ArgumentId);
-        Assert.Equal("кс 2", api.LastCategoryQuery);
+        Assert.Contains("кс 2", api.Queries, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task PrepareCategory_TriesTransliterationWhenRussianQueryFindsNothing()
+    {
+        var api = new FakeTwitchApi
+        {
+            Category = new TwitchCategory("game-42", "Dota 2", null),
+            // Первый (русский) запрос ничего не находит, латинский — находит.
+            OnlyQueryFound = "dota 2"
+        };
+        var adapter = new TwitchCommandAdapter(api);
+        var command = new ParsedCommand(CommandIntent.SetStreamCategory, "дота два");
+
+        var prepared = await adapter.PrepareAsync(command);
+
+        Assert.Equal("Dota 2", prepared.Argument);
+        Assert.Equal("game-42", prepared.ArgumentId);
+        Assert.Contains("дота два", api.Queries, StringComparer.Ordinal);
+        Assert.Contains("dota 2", api.Queries, StringComparer.Ordinal);
     }
 
     [Fact]
@@ -44,109 +64,43 @@ public sealed class TwitchCommandAdapterTests
         var prepared = await adapter.PrepareAsync(command);
 
         Assert.Same(command, prepared);
-        Assert.Null(api.LastCategoryQuery);
-    }
-
-    [Fact]
-    public async Task PrepareTitle_AppendsCurrentTags()
-    {
-        var api = new FakeTwitchApi
-        {
-            Channel = new TwitchChannel("Старое !tg !exitlag", string.Empty, string.Empty)
-        };
-        var adapter = new TwitchCommandAdapter(api);
-        var command = new ParsedCommand(CommandIntent.SetStreamTitle, "Вечерний ranked");
-
-        var prepared = await adapter.PrepareAsync(command);
-
-        Assert.Equal("Вечерний ranked !tg !exitlag", prepared.Argument);
-    }
-
-    [Fact]
-    public async Task PrepareTitle_DoesNotDuplicateTagsCaseInsensitively()
-    {
-        var api = new FakeTwitchApi
-        {
-            Channel = new TwitchChannel("Старое !TG !exitlag", string.Empty, string.Empty)
-        };
-        var adapter = new TwitchCommandAdapter(api);
-        var command = new ParsedCommand(CommandIntent.SetStreamTitle, "Вечерний !tg");
-
-        var prepared = await adapter.PrepareAsync(command);
-
-        Assert.Equal("Вечерний !tg !exitlag", prepared.Argument);
-    }
-
-    [Fact]
-    public async Task PrepareTitle_RejectsTooLongResultWithoutUpdate()
-    {
-        var api = new FakeTwitchApi
-        {
-            Channel = new TwitchChannel("!tag", string.Empty, string.Empty)
-        };
-        var adapter = new TwitchCommandAdapter(api);
-        var command = new ParsedCommand(CommandIntent.SetStreamTitle, new string('а', 140));
-
-        var exception = await Assert.ThrowsAsync<TwitchApiException>(
-            () => adapter.PrepareAsync(command));
-
-        Assert.Contains("140", exception.Message, StringComparison.Ordinal);
-        Assert.Null(api.LastTitle);
-    }
-
-    [Fact]
-    public async Task PrepareTitle_ReadFailureRejectsCommand()
-    {
-        var api = new FakeTwitchApi { ChannelFailure = new TwitchApiException("Twitch недоступен") };
-        var adapter = new TwitchCommandAdapter(api);
-
-        await Assert.ThrowsAsync<TwitchApiException>(
-            () => adapter.PrepareAsync(
-                new ParsedCommand(CommandIntent.SetStreamTitle, "Название")));
-    }
-
-    [Fact]
-    public async Task ExecuteTitle_UpdatesTwitchAndReturnsResult()
-    {
-        var api = new FakeTwitchApi();
-        var adapter = new TwitchCommandAdapter(api);
-
-        var result = await adapter.ExecuteAsync(
-            new ParsedCommand(CommandIntent.SetStreamTitle, "  Новый стрим  "));
-
-        Assert.Equal("Новый стрим", api.LastTitle);
-        Assert.Contains("Новый стрим", result, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ExecuteTitle_RejectsEmptyAndTooLongTitle()
-    {
-        var api = new FakeTwitchApi();
-        var adapter = new TwitchCommandAdapter(api);
-
-        await Assert.ThrowsAsync<TwitchApiException>(
-            () => adapter.ExecuteAsync(new ParsedCommand(CommandIntent.SetStreamTitle, " ")));
-        await Assert.ThrowsAsync<TwitchApiException>(
-            () => adapter.ExecuteAsync(
-                new ParsedCommand(CommandIntent.SetStreamTitle, new string('а', 141))));
-
-        Assert.Null(api.LastTitle);
+        Assert.Empty(api.Queries);
     }
 
     [Fact]
     public async Task ExecuteCategory_UsesResolvedGameId()
     {
-        var api = new FakeTwitchApi();
+        var api = new FakeTwitchApi { Channel = new TwitchChannel(string.Empty, "Dota 2", "game-1") };
         var adapter = new TwitchCommandAdapter(api);
         var command = new ParsedCommand(
             CommandIntent.SetStreamCategory,
-            "Counter-Strike 2",
+            "Dota 2",
             ArgumentId: "game-1");
 
         var result = await adapter.ExecuteAsync(command);
 
         Assert.Equal("game-1", api.LastGameId);
-        Assert.Contains("Counter-Strike 2", result, StringComparison.Ordinal);
+        Assert.Contains("Dota 2", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteCategory_WhenTwitchDidNotApplyChange_ReportsActualCategory()
+    {
+        // Helix ответил успехом, но категория осталась прежней: молчать нельзя.
+        var api = new FakeTwitchApi
+        {
+            Channel = new TwitchChannel(string.Empty, "Just Chatting", "game-old")
+        };
+        var adapter = new TwitchCommandAdapter(api);
+        var command = new ParsedCommand(
+            CommandIntent.SetStreamCategory,
+            "Dota 2",
+            ArgumentId: "game-1");
+
+        var exception = await Assert.ThrowsAsync<TwitchApiException>(
+            () => adapter.ExecuteAsync(command));
+
+        Assert.Contains("Just Chatting", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -165,14 +119,14 @@ public sealed class TwitchCommandAdapterTests
     {
         public TwitchCategory? Category { get; init; }
 
+        public string? OnlyQueryFound { get; init; }
+
         public TwitchChannel Channel { get; init; } =
-            new("Текущее название", string.Empty, string.Empty);
+            new(string.Empty, string.Empty, string.Empty);
 
         public Exception? ChannelFailure { get; init; }
 
-        public string? LastCategoryQuery { get; private set; }
-
-        public string? LastTitle { get; private set; }
+        public List<string> Queries { get; } = new();
 
         public string? LastGameId { get; private set; }
 
@@ -191,14 +145,10 @@ public sealed class TwitchCommandAdapterTests
             string query,
             CancellationToken cancellationToken = default)
         {
-            LastCategoryQuery = query;
-            return Task.FromResult(Category);
-        }
-
-        public Task UpdateTitleAsync(string title, CancellationToken cancellationToken = default)
-        {
-            LastTitle = title;
-            return Task.CompletedTask;
+            Queries.Add(query);
+            var found = OnlyQueryFound is null ||
+                        string.Equals(query, OnlyQueryFound, StringComparison.OrdinalIgnoreCase);
+            return Task.FromResult(found ? Category : null);
         }
 
         public Task UpdateCategoryAsync(string gameId, CancellationToken cancellationToken = default)

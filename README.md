@@ -1,8 +1,9 @@
 # OBS Voice Assistant
 
-An offline Windows voice assistant for OBS Studio and Twitch. Hold `Caps Lock`, say a short Russian
-command, and release: the application recognizes speech locally, controls OBS Studio, and shows the
-result in a notification. The wake word «Бочи» (Bochi) works alongside push-to-talk.
+An offline Windows voice assistant for OBS Studio and Twitch. Hold the push-to-talk key (Caps Lock by
+default, configurable), say a short Russian command, and release: the application recognizes speech
+locally, controls OBS Studio, and shows the result in a notification. The wake word «Бочи» (Bochi)
+works alongside push-to-talk.
 
 The application runs in the system tray and never sends audio to the cloud. Documentation for
 development and architecture is in [`AGENTS.md`](AGENTS.md).
@@ -32,7 +33,7 @@ dotnet run --project src/ObsVoiceAssistant/ObsVoiceAssistant.csproj
 ```
 
 The application starts in the tray. A second launch shows a message and exits: only one instance is
-allowed, otherwise the global Caps Lock handler and microphone capture would run twice.
+allowed, otherwise the global push-to-talk hook and microphone capture would run twice.
 
 Self-contained publish:
 
@@ -102,11 +103,13 @@ written to the log. The Client ID is a public identifier and is stored in `setti
 
 Commands are Russian-only. There are two activation modes:
 
-- **Push-to-talk:** hold `Caps Lock`, speak, release. The normal Caps Lock toggle is suppressed.
+- **Push-to-talk:** hold the configured key (Caps Lock by default), speak, release. The key or
+  combination is set in the settings window: type it, for example `Ctrl+Shift+F9`, or press
+  **Определить** and press the real key. The normal Caps Lock toggle is always suppressed.
 - **Wake word:** say «Бочи» alone and then a command within 6 seconds, or say the wake word right
   before the command, for example «Бочи, включи микрофон». Background speech without the wake word
-  is ignored. While Caps Lock is held, wake-word listening is suspended so the same command is not
-  executed twice.
+  is ignored. While the push-to-talk key is held, wake-word listening is suspended so the same
+  command is not executed twice.
 
 Typical commands:
 
@@ -125,8 +128,7 @@ Typical commands:
 | Mute/unmute stream music | `выключи музыку стрима`, `включи звук стрима` | No |
 | Mute all sound | `ол мут`, `выключи весь звук` | No |
 | Change volume | `громкость микрофона плюс 10`, `громкость музыки минус 5` | No |
-| Change stream title | `измени название стрима на ...` | Yes |
-| Change stream category | `измени категорию стрима на ...` | Yes |
+| Change stream category | `измени категорию стрима на ...`, `поменяй категорию игры на ...` | Yes |
 
 Dangerous actions show a Windows notification with **Подтвердить** and **Отмена** buttons. The
 action is performed only after **Подтвердить**; **Отмена**, closing the notification, or no response
@@ -140,17 +142,18 @@ Volume is changed in percentage points from 0 to 100; without a number the step 
 «громче»/«тише» mean plus/minus 10. The notification shows the actual value after clamping.
 
 When personal music is muted, the application pauses the Yandex Music desktop app through Windows
-media sessions. Unmuting the OBS source does not resume playback: the player is never started
-automatically. If the player has no media session, the OBS action still succeeds and the notification
-reports that the pause or track switch was not performed.
+media sessions. Unmuting the OBS source resumes playback from the pause. If the player has no media
+session, the OBS action still succeeds and the notification reports that the pause, resume, or track
+switch was not performed.
 
-## Twitch title tags and viewer count
+## Twitch stream category and viewer count
 
-When the stream title changes, the current title is read from Twitch before confirmation. Words
-starting with `!`, for example `!tg` and `!exitlag`, are appended to the new title in the order they
-appear in the old title, without duplicates. The confirmation shows the final title in full. A title
-longer than 140 characters, together with the tags, is rejected without calling Twitch. Only trailing
-punctuation is removed from the spoken title.
+The stream title is edited manually in the Twitch dashboard: the application does not change it by
+voice. The category is changed by voice. Before the confirmation, the spoken name is searched on
+Twitch — the first result is used, and the confirmation shows its exact name. Russian names are
+searched by transliteration and digits as well, so «дота два» finds `Dota 2`. After the confirmation
+the category is re-read; if Twitch did not apply the change, the notification says which category is
+actually set.
 
 The viewer count overlay is disabled by default. Enable it with the **Счётчик зрителей** item in the
 tray menu or with the checkbox in settings. The always-on-top window does not take focus, does not
@@ -179,7 +182,8 @@ copy was not created. OBS files that are already MP4 do not get a copy.
 
 All local data is stored in `%LOCALAPPDATA%\ObsVoiceAssistant`:
 
-- `settings.json` — OBS address, Twitch Client ID, source names, overlay settings, ffmpeg path;
+- `settings.json` — OBS address, Twitch Client ID, source names, push-to-talk key, overlay settings,
+  ffmpeg path;
 - `secrets` — OBS password and Twitch tokens, protected with Windows DPAPI;
 - `assistant.log` — the current run log.
 
@@ -195,8 +199,8 @@ dotnet test tests/CustomerMail.UnitTests
 ```
 
 Unit tests do not need OBS, Twitch credentials, or a speech model. Integration tests for OBS/Twitch
-boundaries are in `tests/ObsVoiceAssistant.IntegrationTests`. Manual scenarios for Caps Lock,
-notifications, Twitch, Yandex Music, and the overlay are listed in
+boundaries are in `tests/ObsVoiceAssistant.IntegrationTests`. Manual scenarios for the push-to-talk
+key, notifications, Twitch, Yandex Music, and the overlay are listed in
 [`docs/MVP_PLAN.md`](docs/MVP_PLAN.md#6-mandatory-manual-test-cases).
 
 ## Troubleshooting
@@ -206,8 +210,8 @@ notifications, Twitch, Yandex Music, and the overlay are listed in
   [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 - No OBS connection: verify that OBS is running, OBS WebSocket is enabled, and the address and
   password match.
-- Yandex Music is not paused: start playback in the desktop app and make sure it appears in the
-  Windows media popup. The browser version is not controlled.
+- Yandex Music is not paused or resumed: start playback in the desktop app and make sure it appears
+  in the Windows media popup. The browser version is not controlled.
 - The overlay is hidden: Twitch must be connected and the stream must be live. A network error keeps
   the last value dimmed instead of showing a toast.
 
@@ -220,7 +224,9 @@ notifications, Twitch, Yandex Music, and the overlay are listed in
   overlay.
 - [`docs/integrations/twitch.md`](docs/integrations/twitch.md) — OAuth, Helix, title tags, and viewer
   count.
-- [`AGENTS.md`](AGENTS.md) — architecture, rules, and development workflow.
+- [`AGENTS.md`](AGENTS.md) — mandatory rules for coding agents and an index of topic documents.
+- [`docs/agents/`](docs/agents/) — architecture, stack and commands, testing, and the customer mail
+  procedure for development.
 
 All documentation is kept in English only; Russian duplicates with the `.ru.md` suffix are not used.
 The README is intentionally English-only.

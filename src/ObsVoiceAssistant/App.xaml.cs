@@ -29,7 +29,7 @@ public partial class App : System.Windows.Application
     private NAudioMicrophoneRecorder? wakeWordRecorder;
     private ContinuousListeningService? wakeWordListening;
     private WakeWordSession? wakeWordSession;
-    private CapsLockHook? capsLockHook;
+    private PushToTalkHook? capsLockHook;
     private PushToTalkController? pushToTalk;
     private readonly SemaphoreSlim recognitionGate = new(1, 1);
     private CommandDispatcher? commandDispatcher;
@@ -48,7 +48,7 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
 
-        // Второй экземпляр создал бы второй глобальный обработчик Caps Lock и второе
+        // Второй экземпляр создал бы второй глобальный обработчик push-to-talk и второе
         // непрерывное прослушивание микрофона. Поэтому он только сообщает о себе
         // и завершается, оставляя работу первому экземпляру.
         singleInstance = new SingleInstanceGuard();
@@ -107,7 +107,7 @@ public partial class App : System.Windows.Application
         pushToTalk = new PushToTalkController(microphoneRecorder);
         pushToTalk.RecordingStarted += () =>
         {
-            // Пока нажат Caps Lock, фраза принадлежит Push-to-talk. Без паузы
+            // Пока удерживается клавиша, фраза принадлежит Push-to-talk. Без паузы
             // одна и та же команда выполнилась бы дважды.
             wakeWordListening.Suspend();
 
@@ -120,35 +120,12 @@ public partial class App : System.Windows.Application
             wakeWordListening.Resume();
             _ = ProcessPushToTalkRecordingAsync(recording);
         };
-        capsLockHook = new CapsLockHook(
-            pushToTalk,
-            exception =>
-            {
-                logger.Error("Ошибка Caps Lock push-to-talk", exception);
-                // Если запись не остановилась штатно, непрерывное прослушивание
-                // не должно остаться выключенным навсегда.
-                wakeWordListening.Resume();
-                notifications.Show("Ошибка микрофона. Проверьте микрофон и перезапустите приложение.");
-            });
         wakeWordListening.Start();
         logger.Info(
             $"Прослушивание ключевого слова «{WakeWordSession.WakeWord}» включено: " +
             "скажите слово отдельно или сразу вместе с командой.");
 
-        try
-        {
-            capsLockHook.Start();
-            logger.Info(
-                "Push-to-talk включён: удерживайте Caps Lock во время речи, " +
-                "отпустите для распознавания. Обычное переключение Caps Lock отключено.");
-        }
-        catch (Exception exception)
-        {
-            logger.Error("Не удалось включить Caps Lock push-to-talk", exception);
-            capsLockHook.Dispose();
-            capsLockHook = null;
-            notifications.Show("Не удалось включить Caps Lock. Перезапустите приложение.");
-        }
+        StartPushToTalkHook();
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -208,7 +185,8 @@ public partial class App : System.Windows.Application
         {
             RestartObsConnection();
 
-            // Настройки оверлея применяются без перезапуска приложения.
+            // Клавиша и настройки оверлея применяются без перезапуска приложения.
+            StartPushToTalkHook();
             var settings = settingsService.Load();
             viewerOverlayEnabled = settings.ViewerOverlayEnabled;
             trayIcon?.SetOverlayEnabled(viewerOverlayEnabled);
@@ -245,6 +223,55 @@ public partial class App : System.Windows.Application
         viewerOverlayEnabled = settings.ViewerOverlayEnabled;
         trayIcon.SetOverlayEnabled(viewerOverlayEnabled);
         ApplyViewerOverlayState();
+    }
+
+    /// <summary>
+    /// Перезапускает глобальный обработчик с клавишей из настроек. Настройка
+    /// применяется без перезапуска приложения: хук пересоздаётся.
+    /// </summary>
+    private void StartPushToTalkHook()
+    {
+        if (pushToTalk is null || notifications is null)
+        {
+            return;
+        }
+
+        capsLockHook?.Dispose();
+        capsLockHook = null;
+
+        var settings = settingsService?.Load();
+        if (!PushToTalkHotkey.TryParse(settings?.PushToTalkHotkey, out var hotkey, out var error))
+        {
+            logger.Error($"Некорректная клавиша Push-to-talk: {error}. Используется Caps Lock.");
+            notifications.Show($"Клавиша Push-to-talk задана неверно: {error} Используется Caps Lock.");
+            hotkey = PushToTalkHotkey.CapsLock;
+        }
+
+        var hook = new PushToTalkHook(
+            pushToTalk,
+            hotkey,
+            exception =>
+            {
+                logger.Error("Ошибка push-to-talk", exception);
+                wakeWordListening?.Resume();
+                notifications.Show("Ошибка микрофона. Проверьте микрофон и перезапустите приложение.");
+            });
+
+        try
+        {
+            hook.Start();
+            capsLockHook = hook;
+            logger.Info(
+                $"Push-to-talk включён: удерживайте {hotkey.DisplayName} во время речи, " +
+                "отпустите для распознавания. Обычное переключение Caps Lock отключено.");
+        }
+        catch (Exception exception)
+        {
+            logger.Error($"Не удалось включить push-to-talk ({hotkey.DisplayName})", exception);
+            hook.Dispose();
+            notifications.Show(
+                $"Не удалось включить {hotkey.DisplayName}. Проверьте настройку и перезапустите приложение.");
+        }
     }
 
     private void SetViewerOverlayEnabled(bool enabled)
@@ -392,7 +419,7 @@ public partial class App : System.Windows.Application
         }
 
         // Vosk не рассчитан на параллельные вызовы: если пользователь быстро нажмёт
-        // Caps Lock несколько раз, распознаём записи строго по одной.
+        // клавишу push-to-talk несколько раз, распознаём записи строго по одной.
         await recognitionGate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -419,7 +446,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Vosk не рассчитан на параллельные вызовы: Caps Lock и ключевое слово
+        // Vosk не рассчитан на параллельные вызовы: push-to-talk и ключевое слово
         // распознаются строго по одной записи.
         await recognitionGate.WaitAsync().ConfigureAwait(false);
         try

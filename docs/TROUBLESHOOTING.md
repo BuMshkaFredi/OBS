@@ -50,15 +50,13 @@ is created by ffmpeg without re-encoding (`-c copy`), so quality and sound do no
 - A category search error appears before the confirmation notification: either Twitch returned no
   category or the connection is temporarily unavailable. Repeat the phrase with the category name.
 - The category notification shows the Twitch search result, not the original recognized name.
-  Check it before pressing `Подтвердить` (Confirm).
-- After a successful update, the notification shows the new title or category. Helix errors are
-  shown as a safe message; tokens are never included in diagnostics.
-- `Не удалось прочитать текущее название на Twitch` — the current title could not be read, so the
-  command is rejected and the title does not change. Check the Twitch connection and repeat.
-- When the old title contains `!tg` and `!exitlag`, the confirmation already shows the final title
-  with these tags. Tags are words starting with `!`; tags without `!` are not preserved. If the
-  result together with the tags is longer than 140 characters, the command is rejected and no
-  external call is made. Only trailing punctuation is removed from the spoken title.
+  Check it before pressing `Подтвердить` (Confirm). Russian names are transliterated before the
+  second search attempt, so «дота два» finds `Dota 2`.
+- After a successful update, the notification shows the new category. Helix errors are shown as a
+  safe message; tokens are never included in diagnostics.
+- `Twitch не применил смену категории` — the update request returned success, but re-reading the
+  channel showed another category. Repeat the command; if it repeats, change the category in the
+  Twitch dashboard and report the exact Helix answer from the log.
 
 Connection and session recovery details: [`integrations/twitch.md`](integrations/twitch.md).
 
@@ -160,11 +158,11 @@ would pause the wrong player.
   remains successful.
 - `Плеер Яндекс Музыки не найден: трек не переключён` — the next-track command did not find the
   player. Start the desktop app and check that it shows up in the Windows media popup.
-- `Не удалось поставить паузу в Яндекс Музыке: ...` or `Не удалось переключить трек: ...` — Windows
-  accepted the request but returned an error. The reason is in the notification and the log; OBS
-  commands are not affected.
-- `включи музыку` unmutes the OBS source but does not resume playback. This is expected: the
-  application only pauses when the source is muted, it never starts the player on its own.
+- `Не удалось поставить паузу в Яндекс Музыке: ...`, `Не удалось возобновить Яндекс Музыку: ...`, or
+  `Не удалось переключить трек: ...` — Windows accepted the request but returned an error. The reason
+  is in the notification and the log; OBS commands are not affected.
+- `включи музыку` unmutes the OBS source and resumes the Yandex Music session. If nothing is playing,
+  the player stays silent: the command continues the selected session, it does not start a new one.
 - A paused Yandex Music session is still a valid target. If there are several Yandex sessions, the
   playing one is preferred.
 

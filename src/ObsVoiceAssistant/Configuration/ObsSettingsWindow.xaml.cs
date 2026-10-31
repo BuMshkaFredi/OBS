@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using MediaBrushes = System.Windows.Media.Brushes;
+using ObsVoiceAssistant.Audio;
 using ObsVoiceAssistant.Integrations.Obs;
 using ObsVoiceAssistant.Integrations.Twitch;
 
@@ -16,6 +18,7 @@ public partial class ObsSettingsWindow : Window
     private CancellationTokenSource? twitchConnectCts;
     private TwitchDeviceCode? currentDeviceCode;
     private bool twitchBusy;
+    private bool capturingHotkey;
 
     public ObsSettingsWindow(
         SettingsService settingsService,
@@ -33,6 +36,9 @@ public partial class ObsSettingsWindow : Window
         TwitchClientIdBox.Text = settings.TwitchClientId ?? string.Empty;
         CreateMp4CopyCheckBox.IsChecked = settings.CreateMp4Copy;
         FfmpegPathBox.Text = settings.FfmpegPath ?? string.Empty;
+        PushToTalkHotkeyBox.Text = string.IsNullOrWhiteSpace(settings.PushToTalkHotkey)
+            ? PushToTalkHotkey.CapsLock.DisplayName
+            : settings.PushToTalkHotkey;
         ViewerOverlayCheckBox.IsChecked = settings.ViewerOverlayEnabled;
         ViewerOverlayIntervalBox.Text = settings.ViewerOverlayIntervalSeconds
             .ToString(CultureInfo.InvariantCulture);
@@ -231,6 +237,14 @@ public partial class ObsSettingsWindow : Window
             return;
         }
 
+        var hotkeyText = PushToTalkHotkeyBox.Text.Trim();
+        if (!Audio.PushToTalkHotkey.TryParse(hotkeyText, out var hotkey, out var hotkeyError))
+        {
+            StatusText.Foreground = MediaBrushes.Firebrick;
+            StatusText.Text = hotkeyError ?? "Не удалось разобрать клавишу Push-to-talk.";
+            return;
+        }
+
         var clientId = TwitchClientIdBox.Text.Trim();
         var savedClientId = settingsService.Load().TwitchClientId;
         if (!string.Equals(savedClientId, clientId, StringComparison.Ordinal))
@@ -246,6 +260,7 @@ public partial class ObsSettingsWindow : Window
             TwitchClientId = string.IsNullOrWhiteSpace(clientId) ? null : clientId,
             CreateMp4Copy = CreateMp4CopyCheckBox.IsChecked == true,
             FfmpegPath = string.IsNullOrWhiteSpace(FfmpegPathBox.Text) ? null : FfmpegPathBox.Text.Trim(),
+            PushToTalkHotkey = hotkey.ToSettingValue(),
             ViewerOverlayEnabled = ViewerOverlayCheckBox.IsChecked == true,
             ViewerOverlayIntervalSeconds = overlayInterval,
             AudioInputs = new ObsAudioInputs(
@@ -267,6 +282,64 @@ public partial class ObsSettingsWindow : Window
 
         DialogResult = true;
         Close();
+    }
+
+    protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+
+        if (!capturingHotkey)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        if (e.Key == Key.Escape)
+        {
+            capturingHotkey = false;
+            CaptureHotkeyButton.Content = "Определить";
+            StatusText.Foreground = MediaBrushes.Black;
+            StatusText.Text = "Определение отменено.";
+            return;
+        }
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift or
+            Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin)
+        {
+            return;
+        }
+
+        var virtualKey = KeyInterop.VirtualKeyFromKey(key);
+        if (virtualKey == 0)
+        {
+            return;
+        }
+
+        var modifiers = Keyboard.Modifiers;
+        var hotkey = new PushToTalkHotkey(
+            virtualKey,
+            modifiers.HasFlag(ModifierKeys.Control),
+            modifiers.HasFlag(ModifierKeys.Shift),
+            modifiers.HasFlag(ModifierKeys.Alt),
+            modifiers.HasFlag(ModifierKeys.Windows));
+
+        PushToTalkHotkeyBox.Text = hotkey.DisplayName;
+        capturingHotkey = false;
+        CaptureHotkeyButton.Content = "Определить";
+        StatusText.Foreground = MediaBrushes.Black;
+        StatusText.Text = $"Клавиша записана: {hotkey.DisplayName}.";
+    }
+
+    private void CaptureHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        capturingHotkey = !capturingHotkey;
+        CaptureHotkeyButton.Content = capturingHotkey ? "Отменить" : "Определить";
+        StatusText.Foreground = MediaBrushes.Black;
+        StatusText.Text = capturingHotkey
+            ? "Нажмите нужную клавишу или комбинацию. Esc — отменить."
+            : "Определение отменено.";
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)

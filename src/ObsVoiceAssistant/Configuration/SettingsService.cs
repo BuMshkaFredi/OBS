@@ -9,6 +9,13 @@ public sealed record AppSettings(
     string ObsUrl = "ws://127.0.0.1:4455")
 {
     /// <summary>
+    /// Клавиша или комбинация push-to-talk. Пусто — Caps Lock. Формат:
+    /// «Ctrl+Shift+F9», «F9», «Caps Lock». Обычное переключение Caps Lock
+    /// при этом всегда подавляется.
+    /// </summary>
+    public string? PushToTalkHotkey { get; init; }
+
+    /// <summary>
     /// Имена OBS-источников для команд mute/unmute. Задаются в окне настройки OBS,
     /// потому что имена источников у каждого пользователя свои.
     /// </summary>

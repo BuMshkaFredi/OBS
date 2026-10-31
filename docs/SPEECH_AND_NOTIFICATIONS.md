@@ -108,7 +108,8 @@ The native libraries `libvosk.dll` and its dependencies are supplied by the `Vos
   `включи личную музыку` toggle the `PersonalMusic` source. The word in the command does not predict
   the result, so the notification shows the actual state: `Личная музыка выключена` /
   `Личная музыка включена`. When the source actually becomes muted, the application also pauses the
-  Yandex Music desktop app; see [Yandex Music](#yandex-music).
+  Yandex Music desktop app, and when it becomes audible again, it resumes playback; see
+  [Yandex Music](#yandex-music).
 - Stream music works like the browser: `выключи музыку стрима`, `включи звук стрима` are explicit
   mute/unmute of the `StreamMusic` source. The key word is “стрим”: without “музыки” or “звука”,
   `выключи стрим` remains stopping the broadcast, and `выключи музыку` refers to personal music.
@@ -166,11 +167,12 @@ application does not use global media keys and does not control the browser vers
   “currently active” session: during a game the active session may belong to another player. If
   several Yandex sessions exist, a playing session is preferred over a paused one.
 - `выключи музыку`, `выключи мою музыку`, and `включи личную музыку` toggle the `PersonalMusic` OBS
-  source. The player is paused only when the source actually became muted; when the source is
-  unmuted, playback is not resumed, so the user decides when to continue.
-- The notification contains both results: `Личная музыка выключена. Яндекс Музыка на паузе`,
-  `Личная музыка выключена. Плеер Яндекс Музыки не найден: пауза не выполнена`, or the source state
-  followed by the WinRT error.
+  source. The player is paused when the source actually became muted and resumed from the pause when
+  it became audible. A player that was not playing stays silent: `TryPlayAsync` only continues the
+  selected session.
+- The notification contains both results: `Личная музыка выключена. Яндекс Музыка поставлена на
+  паузу`, `Личная музыка включена. Яндекс Музыка продолжает играть`, the same text with «плеер не
+  найден», or the source state followed by the WinRT error.
 - `следующий трек`, `следующая песня`, `переключи трек`, `переключить трек`, `смени трек`,
   `сменить трек` switch to the next track without touching OBS sources and without confirmation. The
   result is `Трек переключён в Яндекс Музыке`, `Плеер Яндекс Музыки не найден: трек не переключён`,
@@ -261,7 +263,7 @@ repeating the command.
 Note: loud music from speakers passes the energy gate. Therefore, when debugging, it is better to
 pause the music.
 
-## Activation modes: Caps Lock and the wake word “Бочи”
+## Activation modes: push-to-talk and the wake word “Бочи”
 
 Both modes work simultaneously and independently. Each uses its own recording stream from the default
 microphone; Windows allows several simultaneous recordings in shared mode. Verified on the target
@@ -277,9 +279,13 @@ subscribers; that is a separate refactoring, not a setting.
 
 ### Push-to-talk
 
-- The application records the microphone while `Caps Lock` is held.
-- `Caps Lock down` starts recording, `Caps Lock up` stops it and starts recognition.
-- The normal Caps Lock state toggle is not performed while the application is running.
+- The application records the microphone while the push-to-talk key is held.
+- The key or combination is set in the settings window; Caps Lock is the default. `Key down` starts
+  recording, `Key up` stops it and starts recognition, even if the modifiers were released first.
+- The normal Caps Lock state toggle is not performed while the application is running, even when
+  another trigger key is configured.
+- A combination with modifiers is swallowed, so `Ctrl+Shift+F9` does not also reach another
+  application; a single-key trigger is passed through.
 - Recordings are recognized sequentially so that Vosk is not called in parallel.
 
 ### Wake word “Бочи”
@@ -294,10 +300,10 @@ subscribers; that is a separate refactoring, not a setting.
 - “Бочи, включи микрофон” executes the command immediately, without a separate window.
 - Background speech without the wake word is not executed and shows no notifications: only the line
   `Без ключевого слова, пропущено: «...»` is written to the log.
-- The waiting window closes after the command is executed, after 6 seconds, or when `Caps Lock` is
-  pressed: a button command cancels the wait.
-- While `Caps Lock` is held, continuous listening is paused and the current phrase is discarded.
-  Therefore the same speech is not executed twice.
+- The waiting window closes after the command is executed, after 6 seconds, or when the push-to-talk
+  key is pressed: a button command cancels the wait.
+- While the push-to-talk key is held, continuous listening is paused and the current phrase is
+  discarded. Therefore the same speech is not executed twice.
 - Vosk hears “Бочи” differently. The exact variants are listed in `Speech/WakeWordSession.cs`
   (`SpokenForms`): `бочи`, `боче`, `бочий`, `бочии`, `бочь`, `боч`, `бочка`, `бочки`, `бочке`,
   `бочек`, `боже`. Besides an exact match, **one** recognition error (substitution, insertion, or
@@ -312,13 +318,12 @@ subscribers; that is a separate refactoring, not a setting.
 
 ## Windows Toast Notifications
 
-Dangerous commands (`начни стрим`, `останови запись`, `останови стрим`, changing the Twitch title or
+Dangerous commands (`начни стрим`, `останови запись`, `останови стрим`, changing the Twitch
 category) show a Windows Toast with two actions: `Подтвердить` and `Отмена`. The command is sent to
 OBS/Twitch only after `Подтвердить`; closing the notification, an error, or `Отмена` results in a
 refusal. For a category, a Twitch search is performed before the notification is shown; the
-confirmation text shows the exact name of the first result. For a title, the confirmation text
-already contains the final title with the preserved `!` tags. The title and category receive a
-separate informational notification after a successful change. Twitch setup is described in
+confirmation text shows the exact name of the first result. The category receives a separate
+informational notification after a successful change. Twitch setup is described in
 [`integrations/twitch.md`](integrations/twitch.md).
 
 Separately from confirmations, there are informational notifications. They are needed where the

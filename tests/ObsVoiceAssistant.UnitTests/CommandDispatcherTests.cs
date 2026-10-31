@@ -25,7 +25,7 @@ public sealed class CommandDispatcherTests
             new RecordingObsPort(),
             twitch,
             new ConfirmationPolicy());
-        var command = new ParsedCommand(CommandIntent.SetStreamTitle, "Название");
+        var command = new ParsedCommand(CommandIntent.SetStreamCategory, "Dota 2");
 
         var outcome = await dispatcher.DispatchAsync(command);
 
@@ -68,12 +68,12 @@ public sealed class CommandDispatcherTests
             new ParsedCommand(CommandIntent.ToggleInput, Target: "personal_music"));
 
         Assert.Equal(1, media.PauseCalls);
-        Assert.Contains("Яндекс Музыка на паузе", outcome, StringComparison.Ordinal);
+        Assert.Contains("Яндекс Музыка поставлена на паузу", outcome, StringComparison.Ordinal);
         Assert.False(obs.ExecuteCalled);
     }
 
     [Fact]
-    public async Task PersonalMusicUnmute_DoesNotPauseYandexMusic()
+    public async Task PersonalMusicUnmute_ResumesYandexMusic()
     {
         var obs = new RecordingObsPort
         {
@@ -90,7 +90,33 @@ public sealed class CommandDispatcherTests
             new ParsedCommand(CommandIntent.ToggleInput, Target: "personal_music"));
 
         Assert.Equal(0, media.PauseCalls);
-        Assert.Equal("Личная музыка включена", outcome);
+        Assert.Equal(1, media.ResumeCalls);
+        Assert.Contains("Личная музыка включена", outcome, StringComparison.Ordinal);
+        Assert.Contains("продолжает играть", outcome, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PersonalMusicUnmute_WithoutPlayer_StillReportsObsResult()
+    {
+        var obs = new RecordingObsPort
+        {
+            ToggleResult = new InputToggleResult("Личная музыка включена", false)
+        };
+        var media = new RecordingMediaPlayback
+        {
+            ResumeResult = MediaPlaybackResult.PlayerNotFound()
+        };
+        var dispatcher = new CommandDispatcher(
+            obs,
+            new NullTwitchCommandPort(),
+            new ConfirmationPolicy(),
+            media);
+
+        var outcome = await dispatcher.DispatchAsync(
+            new ParsedCommand(CommandIntent.ToggleInput, Target: "personal_music"));
+
+        Assert.Contains("Личная музыка включена", outcome, StringComparison.Ordinal);
+        Assert.Contains("не найден", outcome, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -181,9 +207,13 @@ public sealed class CommandDispatcherTests
     {
         public int PauseCalls { get; private set; }
 
+        public int ResumeCalls { get; private set; }
+
         public int NextTrackCalls { get; private set; }
 
         public MediaPlaybackResult PauseResult { get; init; } = MediaPlaybackResult.Success();
+
+        public MediaPlaybackResult ResumeResult { get; init; } = MediaPlaybackResult.Success();
 
         public MediaPlaybackResult NextTrackResult { get; init; } = MediaPlaybackResult.Success();
 
@@ -191,6 +221,12 @@ public sealed class CommandDispatcherTests
         {
             PauseCalls++;
             return Task.FromResult(PauseResult);
+        }
+
+        public Task<MediaPlaybackResult> ResumeAsync(CancellationToken cancellationToken = default)
+        {
+            ResumeCalls++;
+            return Task.FromResult(ResumeResult);
         }
 
         public Task<MediaPlaybackResult> NextTrackAsync(CancellationToken cancellationToken = default)

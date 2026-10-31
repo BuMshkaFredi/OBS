@@ -29,7 +29,7 @@ public sealed class CommandDispatcher
     public Task<ParsedCommand> PrepareAsync(
         ParsedCommand command,
         CancellationToken cancellationToken = default) =>
-        command.Intent is CommandIntent.SetStreamTitle or CommandIntent.SetStreamCategory
+        command.Intent is CommandIntent.SetStreamCategory
             ? twitch.PrepareAsync(command, cancellationToken)
             : Task.FromResult(command);
 
@@ -42,13 +42,13 @@ public sealed class CommandDispatcher
             return await NextMusicTrackAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        if (command.Intent is CommandIntent.SetStreamTitle or CommandIntent.SetStreamCategory)
+        if (command.Intent is CommandIntent.SetStreamCategory)
         {
             return await twitch.ExecuteAsync(command, cancellationToken).ConfigureAwait(false);
         }
 
-        // Пауза имеет смысл только после фактического выключения личной музыки.
-        // Если источник включили, плеер не трогаем: возобновление остаётся за пользователем.
+        // Плеер управляется только вместе с фактическим переключением личной музыки:
+        // при выключении ставим паузу, при включении снимаем с паузы.
         if (command.Intent == CommandIntent.ToggleInput &&
             command.Target == "personal_music" &&
             mediaPlayback is not null)
@@ -64,20 +64,29 @@ public sealed class CommandDispatcher
         CancellationToken cancellationToken)
     {
         var toggle = await obs.ToggleInputAsync(command, cancellationToken).ConfigureAwait(false);
-        if (toggle.Muted != true)
+        var prefix = toggle.Message ?? "Личная музыка переключена";
+        if (toggle.Muted is null)
         {
             return toggle.Message;
         }
 
-        var playback = await mediaPlayback!.PauseAsync(cancellationToken).ConfigureAwait(false);
-        var prefix = toggle.Message ?? "Личная музыка переключена";
+        var playback = toggle.Muted == true
+            ? await mediaPlayback!.PauseAsync(cancellationToken).ConfigureAwait(false)
+            : await mediaPlayback!.ResumeAsync(cancellationToken).ConfigureAwait(false);
+
+        // Слово в команде не предсказывает результат («выключи» могло включить),
+        // поэтому текст плейера выбирается по фактическому состоянию источника.
+        var verb = toggle.Muted == true ? "поставлена на паузу" : "продолжает играть";
 
         return playback.Outcome switch
         {
-            MediaPlaybackOutcome.Succeeded => $"{prefix}. Яндекс Музыка на паузе",
+            MediaPlaybackOutcome.Succeeded => $"{prefix}. Яндекс Музыка {verb}",
             MediaPlaybackOutcome.PlayerNotFound =>
-                $"{prefix}. Плеер Яндекс Музыки не найден: пауза не выполнена",
-            _ => $"{prefix}. Не удалось поставить паузу в Яндекс Музыке{Describe(playback)}"
+                $"{prefix}. Плеер Яндекс Музыки не найден: " +
+                (toggle.Muted == true ? "пауза не выполнена" : "воспроизведение не возобновлено"),
+            _ => toggle.Muted == true
+                ? $"{prefix}. Не удалось поставить паузу в Яндекс Музыке{Describe(playback)}"
+                : $"{prefix}. Не удалось возобновить Яндекс Музыку{Describe(playback)}"
         };
     }
 

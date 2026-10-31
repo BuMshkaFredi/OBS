@@ -2,7 +2,7 @@ namespace ObsVoiceAssistant.Application;
 
 /// <summary>
 /// Не даёт запустить второй экземпляр приложения. Два экземпляра создали бы
-/// два глобальных обработчика Caps Lock и два потока непрерывного прослушивания,
+/// два глобальных обработчика push-to-talk и два потока непрерывного прослушивания,
 /// поэтому одна и та же команда выполнялась бы дважды.
 /// </summary>
 public sealed class SingleInstanceGuard : IDisposable

@@ -35,13 +35,12 @@ cloud recognition service.
 - Windows notifications about success, errors, and confirmation requests.
 - Confirmation buttons `Подтвердить` and `Отмена`.
 - Confirmation for starting and stopping the stream, stopping the recording, and changing the Twitch
-  title and category.
+  category.
 - Twitch connection through OAuth.
-- Changing the Twitch title after confirmation, preserving existing `!` tags.
-- Exact Twitch category lookup, showing the found result, and changing the category after
-  confirmation.
-- Pausing the Yandex Music desktop app when personal music is muted and switching to the next track
-  by voice.
+- Exact Twitch category lookup, showing the found result, checking it after the update, and changing
+  the category after confirmation. The stream title is edited manually.
+- Pausing the Yandex Music desktop app when personal music is muted, resuming it when personal music
+  is turned back on, and switching to the next track by voice.
 - An optional always-on-top viewer count overlay fed by the Twitch Helix API.
 - An MP4 copy of a recording or replay next to the original OBS file.
 - Setting real OBS source names in the “OBS settings” window: names are entered manually or pulled
@@ -91,8 +90,8 @@ cloud recognition service.
 
 ### Slice 0. Project setup and minimal build
 
-Create the solution, the WPF project, the test projects, and the base directory structure from the
-root `AGENTS.md`.
+Create the solution, the WPF project, the test projects, and the base directory structure from
+`docs/agents/architecture.md`.
 
 Readiness criteria:
 
@@ -168,7 +167,6 @@ Readiness criteria:
 - starting the stream always requires confirmation;
 - stopping the recording always requires confirmation;
 - stopping the stream always requires confirmation;
-- changing the Twitch title always requires confirmation;
 - changing the Twitch category always requires confirmation;
 - confirmation is performed only after pressing `Подтвердить`;
 - `Отмена` does not invoke an external operation;
@@ -190,8 +188,7 @@ Readiness criteria:
 - OAuth scopes are agreed before implementation and are minimal;
 - tokens are stored through Windows DPAPI/Credential Manager;
 - the application checks the connection before changing metadata;
-- the title changes only after confirmation;
-- the category is matched to an exact `game_id` before confirmation;
+- the category changes only after confirmation and is verified by re-reading the channel;
 - on temporary unavailability, a reconnect is performed instead of an application crash;
 - tokens are absent from tests, documentation, and logs.
 
@@ -225,21 +222,21 @@ Readiness criteria:
 | `UnmuteInput` (browser) | `включи звук браузера` | No |
 | `MuteAllAudio` | `ол мут`, `выключи весь звук`, `заглуши все` | No |
 | `NextMusicTrack` | `следующий трек`, `переключи трек`, `следующая песня` | No |
-| `SetStreamTitle` | `измени название стрима на ...` | Yes |
-| `SetStreamCategory` | `поменяй категорию игры на ...` | Yes |
+| `SetStreamCategory` | `измени категорию стрима на ...`, `поменяй категорию игры на ...` | Yes |
 
 The actual phrase variants and OBS source names must not be considered final until the settings panel
 appears. Phrase fuzzy matching must not choose an OBS source: the source is taken only from settings.
 
 ## 6. Mandatory Manual Test Cases
 
-1. Press and release Caps Lock without speech: the Caps Lock state does not change.
-2. Hold Caps Lock, say a short Russian command, release: the command is recognized and executed;
-   `начни запись` shows the notification `Запись началась`.
+1. Press and release the push-to-talk key (Caps Lock by default) without speech: the Caps Lock state
+   does not change.
+2. Hold the push-to-talk key, say a short Russian command, release: the command is recognized and
+   executed; `начни запись` shows the notification `Запись началась`.
 3. Execute `останови запись`: without pressing `Подтвердить`, the recording does not stop.
 4. Execute `останови запись`, then press `Отмена`: the recording does not stop.
-5. Check confirmation for starting the stream, stopping the stream, and the Twitch title and
-   category: without pressing `Подтвердить`, the action is not performed.
+5. Check confirmation for starting the stream, stopping the stream, and the Twitch category: without
+   pressing `Подтвердить`, the action is not performed.
 6. Disconnect OBS and check that there is no crash, that a notification appears, and that the
    connection is restored.
 7. Connect OBS after the application starts and check that Replay Buffer is enabled automatically.
@@ -254,8 +251,8 @@ appears. Phrase fuzzy matching must not choose an OBS source: the source is take
 9. Configure `PersonalMusic` and `StreamMusic` and check the music: `выключи музыку` toggles personal
    music and shows the actual state, `выключи музыку стрима` / `включи звук стрима` perform explicit
    mute/unmute. `Выключи стрим` still stops the broadcast, not the music.
-10. Launch the application twice and make sure no two instances and no two global Caps Lock handlers
-    are created.
+10. Launch the application twice and make sure no two instances and no two global push-to-talk
+    handlers are created.
 11. Run the self-contained publish on Windows without Python.
 12. Run the recognition benchmark on both target configurations.
 13. Stop a recording and save a replay: the name window appears. After entering `Тест`, the file gets
@@ -281,16 +278,15 @@ appears. Phrase fuzzy matching must not choose an OBS source: the source is take
     and `громкость плюс стал`.
 21. Start Yandex Music and say `выключи музыку`: the `PersonalMusic` source is muted, the music is
     paused, and the notification shows both the source state and the pause result. Then say
-    `включи музыку`: the source is unmuted, and the music stays paused.
+    `включи музыку`: the source is unmuted and the music resumes from the pause.
 22. Say `следующий трек` with Yandex Music running: the track switches. Repeat with Yandex Music
     closed: the command does not crash and notifies that the player was not found.
 23. Stop a recording with the MP4 copy enabled: the OBS folder contains the original `.mkv` and the
     `.mp4` copy with the same base name, and the original file is neither deleted nor renamed. Repeat
     for saving a replay.
-24. Change the stream title when the current title contains `!tg` and `!exitlag`: the confirmation
-    shows the final title with the tags, and after confirmation the tags are in place and not
-    duplicated. Then set a title that, together with the tags, is longer than 140 characters: the
-    command is rejected and the Twitch title does not change.
+24. Change the category with a Russian name, for example `поменяй категорию игры на дота два`: the
+    confirmation shows the exact Twitch name `Dota 2`, and after confirmation the category is set.
+    Repeat with a name that does not exist: the command is rejected before confirmation.
 25. Enable the viewer overlay and start the stream: the window shows the viewer count and updates.
     After the stream stops, the window hides; the window position persists after a restart.
 
@@ -299,7 +295,7 @@ appears. Phrase fuzzy matching must not choose an OBS source: the source is take
 - The exact Vosk latency depends on the model size, recording length, and CPU load; on
   `vosk-model-small-ru-0.22` the measured RTF is ≈ 0.20–0.23, but the larger models require a
   separate measurement.
-- Caps Lock interception and Windows Toast actions require manual verification in a real Windows
+- Push-to-talk key interception and Windows Toast actions require manual verification in a real Windows
   session.
 - Consider the .NET version, speech engine, and test framework chosen: .NET 10.0.12, Vosk 0.3.38,
   xUnit.
@@ -368,7 +364,7 @@ Work:
    `NextTrackAsync`, and an availability flag. The calls are asynchronous, and WinRT errors are
    handled and not thrown into the UI without explanation.
 2. Dispatcher: after a successful mute of `PersonalMusic`, call pause. When the source is unmuted,
-   the pause is not released: resuming remains up to the user.
+   the pause is released (superseded by section 10.2 on 2026-10-31: the player is resumed).
 3. New intent `NextMusicTrack`: phrases `следующий трек`, `следующая песня`, `переключи трек`,
    `переключить трек`, `смени трек`, `сменить трек`. It works through the same
    `VoiceCommandPipeline` as the other commands; no confirmation is required.
@@ -407,7 +403,11 @@ a discrepancy is found.
 Status 2026-10-27: already implemented in `Recordings/FfmpegMp4CopyService`; no code change was
 needed. Manual test 23 remains pending.
 
-### 9.3. Tags in the Twitch title
+### 9.3. Tags in the Twitch title — withdrawn on 2026-10-31
+
+The customer decided that the stream title is edited manually, so the voice command for the title was
+removed together with its confirmation, tag composition, and tests. The text below is kept as the
+history of the original decision.
 
 Goal: when the stream title changes, the tags that are already in the current title are preserved.
 
@@ -445,6 +445,9 @@ Readiness criteria:
 
 Status 2026-10-27: implemented in `TwitchTitleComposer` and `TwitchCommandAdapter`; unit tests pass.
 Manual test 24 remains pending.
+
+Status 2026-10-31: withdrawn by the customer. `TwitchTitleComposer`, the `SetStreamTitle` intent, the
+title phrases, and the title tests were removed; manual test 24 now checks the category instead.
 
 ### 9.4. Viewer overlay
 
@@ -499,3 +502,71 @@ menu; unit tests pass. Manual test 25 remains pending.
 Status 2026-10-27: release build and all automated tests pass; `AGENTS.md`, the documentation, and
 `README.md` are updated. Manual tests 21–25 are pending and require the Yandex Music desktop app,
 OBS Studio, and saved Twitch tokens.
+
+## 10. Build Feedback (slice 8, accepted 2026-10-31)
+
+Source: the customer email `docs/customer-questions/answers/reply-20261031-060720-ec263136ec.md`,
+decision registry — `docs/customer-questions/QUESTIONS.md`. The user chose: a configurable
+push-to-talk combination, resuming Yandex Music from the pause, fixing the category change, and
+removing the stream title change.
+
+### 10.1. Configurable push-to-talk key
+
+Goal: the user can hold any key or combination instead of Caps Lock, including a separate button on a
+second mini keyboard that sends `Ctrl+Shift+F9`.
+
+Decisions:
+
+- The setting `PushToTalkHotkey` in `settings.json` holds a readable value such as `Ctrl+Shift+F9`;
+  an empty value means Caps Lock, so existing installs keep working.
+- The global low-level hook is generalised from Caps Lock to a configurable hotkey
+  (`Audio/PushToTalkHook`), and the parsing lives in `Audio/PushToTalkHotkey` so it is covered by unit
+  tests without a real keyboard.
+- Caps Lock is always intercepted and never toggles, even when another trigger key is configured;
+  otherwise the user would see the Caps Lock LED change.
+- A combination with modifiers is swallowed by the hook, so the same chord does not also reach
+  another application; a single-key trigger is passed through, so that key keeps working elsewhere.
+- The release of the trigger ends the recording even if the modifiers were released first, otherwise
+  `Ctrl+Shift+F9` could leave the recording open.
+- The settings window has a text field and a **Определить** button that captures the real key or
+  combination, including macro keys that only have a virtual-key code. The setting is applied without
+  restarting the application.
+
+Risks and follow-up work:
+
+- A macro key that sends the whole chord as a quick tap instead of a hold cannot work with
+  push-to-talk; a hold is required. If the customer reports this, a toggle mode must be agreed
+  separately.
+- Windows may reserve some combinations; the hook cannot intercept them.
+
+Status 2026-10-31: implemented in `Audio/PushToTalkHotkey`, `Audio/PushToTalkHook`, `Configuration`,
+the settings window, and `App`; unit tests cover parsing, formatting, and validation. Manual
+verification needs the real second keyboard.
+
+### 10.2. Yandex Music resumes from the pause
+
+The customer reported that pausing works but turning personal music back on does not resume the
+player. `IMediaPlaybackControl.ResumeAsync` calls `TryPlayAsync` on the Yandex Music session and the
+dispatcher uses it when the source becomes audible. A missing player does not cancel the OBS action
+and is reported in the notification. Manual test 21 checks both directions.
+
+Status 2026-10-31: implemented in `Integrations/Media`, `CommandDispatcher`, and the unit tests.
+
+### 10.3. Twitch category fixed, title change removed
+
+The customer reported that category change does not work and asked to remove the title change.
+
+- The title command, its confirmation, tag composition, and tests are removed; the title is edited
+  manually in the Twitch dashboard.
+- Category phrases are generated from verb and object lists, so `поменяй категорию игры на ...`,
+  `смени категорию игры ...`, and similar forms are recognised instead of only the five hand-written
+  prefixes.
+- The spoken name is usually Russian while Twitch category names are Latin. The search tries the
+  original query, a deterministic transliteration, and the transliteration with numerals written as
+  digits, and the confirmation shows the exact name that will be set.
+- After `PATCH /helix/channels` the channel is re-read; when `game_id` did not change, the command
+  fails with the category that is actually set instead of reporting success.
+
+Status 2026-10-31: implemented in `Commands/CommandVocabulary`, `TwitchCategoryQuery`,
+`TwitchCommandAdapter`, and `TwitchApiClient`; unit tests cover the variants and the post-update check.
+Manual test 24 checks the category with a Russian name.

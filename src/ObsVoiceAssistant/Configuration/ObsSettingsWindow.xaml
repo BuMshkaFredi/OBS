@@ -23,6 +23,30 @@
                 <TextBlock Text="Пароль WebSocket (необязательно)" />
                 <PasswordBox x:Name="PasswordBox" Margin="0,6,0,14" Height="24" />
 
+                <TextBlock Text="Клавиша Push-to-talk"
+                           FontWeight="Bold"
+                           Margin="0,6,0,4" />
+                <TextBlock Text="Удерживайте клавишу или комбинацию во время речи. Пустое поле — Caps Lock, его обычное переключение не выполняется. Примеры: F9, Ctrl+Shift+F9, Alt+Z. Кнопка «Определить» записывает то, что реально нажала вторая клавиатура или макро-клавиша."
+                           TextWrapping="Wrap"
+                           Foreground="Gray"
+                           Margin="0,0,0,8" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="PushToTalkHotkeyBox"
+                             Grid.Column="0"
+                             Width="170"
+                             Margin="0,6,8,14" />
+                    <Button x:Name="CaptureHotkeyButton"
+                            Grid.Column="1"
+                            Content="Определить"
+                            Width="100"
+                            Margin="0,6,0,14"
+                            Click="CaptureHotkey_Click" />
+                </Grid>
+
                 <TextBlock Text="Источники OBS для звуковых команд"
                            FontWeight="Bold"
                            Margin="0,6,0,4" />

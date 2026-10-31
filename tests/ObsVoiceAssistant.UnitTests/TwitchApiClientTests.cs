@@ -103,25 +103,6 @@ public sealed class TwitchApiClientTests
     }
 
     [Fact]
-    public async Task UpdateTitle_SendsPatchWithBroadcasterIdAndTitle()
-    {
-        var handler = new StubHttpMessageHandler();
-        handler.EnqueueJson(HttpStatusCode.OK, ValidationJson);
-        handler.EnqueueEmpty(HttpStatusCode.NoContent);
-        using var http = new HttpClient(handler);
-        var api = CreateApi(http, CreateTokenStore());
-
-        await api.UpdateTitleAsync("Новое название");
-
-        var request = handler.Requests[1];
-        Assert.Equal(HttpMethod.Patch, request.Method);
-        Assert.Contains("broadcaster_id=user-1", request.Uri?.Query, StringComparison.Ordinal);
-        Assert.Contains("\\u041D\\u043E\\u0432\\u043E\\u0435 ", request.Body, StringComparison.Ordinal);
-        Assert.Equal("Bearer access-1", request.Authorization);
-        Assert.Equal(ClientId, request.ClientId);
-    }
-
-    [Fact]
     public async Task UpdateCategory_SendsGameId()
     {
         var handler = new StubHttpMessageHandler();
@@ -134,7 +115,10 @@ public sealed class TwitchApiClientTests
 
         var request = handler.Requests[1];
         Assert.Equal(HttpMethod.Patch, request.Method);
+        Assert.Contains("broadcaster_id=user-1", request.Uri?.Query, StringComparison.Ordinal);
         Assert.Contains("\"game_id\":\"game-42\"", request.Body, StringComparison.Ordinal);
+        Assert.Equal("Bearer access-1", request.Authorization);
+        Assert.Equal(ClientId, request.ClientId);
     }
 
     [Fact]
@@ -152,7 +136,7 @@ public sealed class TwitchApiClientTests
         var store = CreateTokenStore();
         var api = CreateApi(http, store);
 
-        await api.UpdateTitleAsync("After refresh");
+        await api.UpdateCategoryAsync("game-42");
 
         Assert.Equal(4, handler.Requests.Count);
         Assert.Contains("grant_type=refresh_token", handler.Requests[2].Body, StringComparison.Ordinal);

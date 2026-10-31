@@ -391,19 +391,7 @@ public static class CommandVocabulary
         ExplicitPhrases.Concat(BuildInputPhrases()).ToArray();
 
     /// <summary>Команды с аргументом после фиксированного префикса.</summary>
-    public static readonly IReadOnlyList<ArgumentCommand> ArgumentCommands = new ArgumentCommand[]
-    {
-        new("измени название стрима на", CommandIntent.SetStreamTitle),
-        new("измени название трансляции на", CommandIntent.SetStreamTitle),
-        new("изменить название стрима на", CommandIntent.SetStreamTitle),
-        new("поставь название стрима", CommandIntent.SetStreamTitle),
-        new("смени название стрима на", CommandIntent.SetStreamTitle),
-        new("измени категорию стрима на", CommandIntent.SetStreamCategory),
-        new("измени категорию трансляции на", CommandIntent.SetStreamCategory),
-        new("изменить категорию стрима на", CommandIntent.SetStreamCategory),
-        new("поставь категорию стрима", CommandIntent.SetStreamCategory),
-        new("смени категорию стрима на", CommandIntent.SetStreamCategory)
-    };
+    public static readonly IReadOnlyList<ArgumentCommand> ArgumentCommands = BuildArgumentCommands();
 
     /// <summary>
     /// Канонические слова команд. Используются только для исправления отдельного слова
@@ -520,6 +508,37 @@ public static class CommandVocabulary
         }
 
         return string.Join(' ', builder.ToString().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static IReadOnlyList<ArgumentCommand> BuildArgumentCommands()
+    {
+        // Категория Twitch: одна и та же команда называется и «категорией»,
+        // и «игрой/категорией игры». Перечислять все сочетания вручную —
+        // источник пропусков вроде отсутствующей формы «категорию игры»,
+        // поэтому префиксы собираются из глаголов и названий объекта.
+        var verbs = new[]
+        {
+            "измени", "изменить", "изменяй", "поменяй", "поменять", "поставь", "поставить",
+            "смени", "сменить", "переключи", "переключить", "обнови", "обновить"
+        };
+        var nouns = new[]
+        {
+            "категорию стрима",
+            "категорию трансляции",
+            "категорию игры"
+        };
+
+        var commands = new List<ArgumentCommand>();
+        foreach (var verb in verbs)
+        {
+            foreach (var noun in nouns)
+            {
+                commands.Add(new ArgumentCommand($"{verb} {noun} на", CommandIntent.SetStreamCategory));
+                commands.Add(new ArgumentCommand($"{verb} {noun}", CommandIntent.SetStreamCategory));
+            }
+        }
+
+        return commands;
     }
 
     private static IReadOnlySet<string> BuildTokenList()

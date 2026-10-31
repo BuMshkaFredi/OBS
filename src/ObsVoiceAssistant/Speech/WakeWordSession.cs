@@ -149,7 +149,7 @@ public sealed class WakeWordSession
     private readonly TimeSpan commandWindow;
     private readonly Func<DateTimeOffset> clock;
 
-    // 0 — окно закрыто. Отдельное поле с Interlocked: Reset приходит из хука Caps Lock,
+    // 0 — окно закрыто. Отдельное поле с Interlocked: Reset приходит из хука push-to-talk,
     // а Handle — из потока распознавания.
     private long armedUntilTicks;
 

@@ -267,23 +267,23 @@ public sealed class CommandCorrectionTests
     [Fact]
     public void Parse_ArgumentCommandWithError_IsCorrected()
     {
-        var result = parser.Parse("измини название стрима на вечерний стрим");
+        var result = parser.Parse("измини категорию стрима на доту два");
 
         Assert.NotNull(result);
-        Assert.Equal(CommandIntent.SetStreamTitle, result.Intent);
-        Assert.Equal("вечерний стрим", result.Argument);
+        Assert.Equal(CommandIntent.SetStreamCategory, result.Intent);
+        Assert.Equal("доту два", result.Argument);
     }
 
     [Fact]
     public void Parse_CorrectedPrefix_KeepsArgumentExactly()
     {
-        // Ошибка в префиксе исправляется, а название стрима остаётся ровно таким,
-        // как его сказали: «клипа» не должно превратиться в «клип».
-        var result = parser.Parse("измини название стрима на клипа");
+        // Ошибка в префиксе исправляется, а название категории остаётся ровно таким,
+        // как его сказали: «муть» не должно превратиться в «мут».
+        var result = parser.Parse("измини категорию стрима на муть");
 
         Assert.NotNull(result);
-        Assert.Equal(CommandIntent.SetStreamTitle, result.Intent);
-        Assert.Equal("клипа", result.Argument);
+        Assert.Equal(CommandIntent.SetStreamCategory, result.Intent);
+        Assert.Equal("муть", result.Argument);
     }
 
     [Theory]

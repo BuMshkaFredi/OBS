@@ -42,26 +42,6 @@ public sealed class CommandParserTests
     }
 
     [Fact]
-    public void Parse_Title_KeepsCaseAndDropsTrailingPunctuation()
-    {
-        // Регистр и «!» важны: тег нельзя восстановить из нижнего регистра.
-        var result = parser.Parse("измени название стрима на Вечерний ranked.");
-
-        Assert.NotNull(result);
-        Assert.Equal(CommandIntent.SetStreamTitle, result.Intent);
-        Assert.Equal("Вечерний ranked", result.Argument);
-    }
-
-    [Fact]
-    public void Parse_Title_KeepsTags()
-    {
-        var result = parser.Parse("измени название стрима на Вечерний ranked !tg !exitlag.");
-
-        Assert.NotNull(result);
-        Assert.Equal("Вечерний ranked !tg !exitlag", result.Argument);
-    }
-
-    [Fact]
     public void Parse_Category_KeepsCase()
     {
         var result = parser.Parse("измени категорию стрима на Just Chatting");
@@ -69,6 +49,20 @@ public sealed class CommandParserTests
         Assert.NotNull(result);
         Assert.Equal(CommandIntent.SetStreamCategory, result.Intent);
         Assert.Equal("Just Chatting", result.Argument);
+    }
+
+    [Theory]
+    [InlineData("поменяй категорию игры на Dota 2")]
+    [InlineData("смени категорию игры Dota 2")]
+    [InlineData("поставь категорию трансляции Dota 2")]
+    [InlineData("переключи категорию стрима на Dota 2")]
+    public void Parse_Category_SupportsSpokenVariants(string text)
+    {
+        var result = parser.Parse(text);
+
+        Assert.NotNull(result);
+        Assert.Equal(CommandIntent.SetStreamCategory, result.Intent);
+        Assert.Equal("Dota 2", result.Argument);
     }
 
     [Theory]
@@ -114,7 +108,6 @@ public sealed class ConfirmationPolicyTests
     [InlineData(CommandIntent.StartStream)]
     [InlineData(CommandIntent.StopRecording)]
     [InlineData(CommandIntent.StopStream)]
-    [InlineData(CommandIntent.SetStreamTitle)]
     [InlineData(CommandIntent.SetStreamCategory)]
     public void DangerousCommands_RequireConfirmation(CommandIntent intent)
     {

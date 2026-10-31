@@ -18,6 +18,10 @@ Statuses: `draft` — draft, `approved` — allowed to send, `sent` — sent, `r
 | --- | --- | --- | --- | --- |
 | REL-001 | 0.1.0 MVP | sent | 2026-10-27 | OBS Voice Assistant — сборка 0.1.0 для проверки |
 
+Build feedback on `REL-001` arrived on 2026-10-31 and is saved in
+`answers/reply-20261031-060720-ec263136ec.md`. It contains no answers to the batch questions, only
+the three wishes listed below.
+
 ## Unscheduled wishes
 
 Wishes that the customer added on their own, outside the question list. Each is recorded as a
@@ -29,6 +33,14 @@ separate row and awaits the user's decision; nothing is implemented automaticall
 | 2026-10-27 | Automatic conversion of a saved recording or replay from mkv to mp4 | `answers/reply-20261027-043724-a15e4e8515.md`, item 2 | accepted: both files are kept — the original mkv and the mp4 copy (already implemented) |
 | 2026-10-27 | When renaming the stream, keep the tags in the title (for example, `!tg`, `!exitlag`, and similar) | `answers/reply-20261027-043724-a15e4e8515.md`, item 3 | accepted: words starting with `!` are kept, without duplicates |
 | 2026-10-27 | If possible, show the number of viewers in real time | `answers/reply-20261027-043724-a15e4e8515.md`, item 4 | accepted: a separate always-on-top window |
+| 2026-10-31 | Rebind the push-to-talk key from Caps Lock to any other key or key combination (F9, F12, Ctrl/Shift combinations; the customer plans to use Ctrl+Shift+F9) | `answers/reply-20261031-060720-ec263136ec.md`, item 1 | accepted: a configurable key or combination, Caps Lock stays the default; the settings window captures the real key |
+| 2026-10-31 | After personal music is turned back on, the Yandex Music app is not resumed from pause (pausing works, resuming does not); the customer asks to fix it | `answers/reply-20261031-060720-ec263136ec.md`, item 2 | accepted: fixed through the same Windows media session, a missing player does not cancel the OBS action |
+| 2026-10-31 | The Twitch category change does not work in the current build; the customer asks to finish it and to remove the stream title change, because the title is better edited manually | `answers/reply-20261031-060720-ec263136ec.md`, item 3 | accepted: the category is fixed and verified after the update; the title command, its confirmation, and tag composition are removed |
+
+User decision on 2026-10-31: all three wishes are accepted and implemented in slice 8 of
+[`docs/MVP_PLAN.md`](../MVP_PLAN.md), section 10. The email contains no answers to batch questions;
+`CQ-001` is closed. Manual verification of the new hotkey requires the customer's second keyboard,
+and manual test 24 now checks the category instead of the title.
 
 User decision on 2026-10-27: all four wishes are accepted. The tasks are added to
 [`docs/MVP_PLAN.md`](../MVP_PLAN.md), section 9 “Additional tasks (slice 7)”; manual tests 21–25 are

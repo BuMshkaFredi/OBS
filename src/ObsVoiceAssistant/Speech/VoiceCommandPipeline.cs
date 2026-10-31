@@ -98,9 +98,9 @@ public sealed class VoiceCommandPipeline
 
         diagnostic?.Invoke($"Распознана команда: {command.Intent}");
 
-        // Название и категорию Twitch проверяем до подтверждения: пользователь должен
-        // увидеть итоговое название с тегами и точный результат поиска категории.
-        if (command.Intent is CommandIntent.SetStreamCategory or CommandIntent.SetStreamTitle)
+        // Категорию Twitch проверяем до подтверждения: пользователь должен
+        // увидеть точный результат поиска, а не исходную фразу распознавания.
+        if (command.Intent is CommandIntent.SetStreamCategory)
         {
             try
             {
@@ -115,9 +115,8 @@ public sealed class VoiceCommandPipeline
             {
                 diagnostic?.Invoke(
                     $"Не удалось подготовить команду Twitch: {exception.GetType().Name}: {exception.Message}");
-                notify?.Invoke(command.Intent == CommandIntent.SetStreamCategory
-                    ? $"Не удалось найти категорию на Twitch: {Truncate(exception.Message)}"
-                    : $"Не удалось прочитать текущее название на Twitch: {Truncate(exception.Message)}");
+                notify?.Invoke(
+                    $"Не удалось найти категорию на Twitch: {Truncate(exception.Message)}");
                 return;
             }
         }
@@ -205,7 +204,6 @@ public sealed class VoiceCommandPipeline
         CommandIntent.ToggleInput => $"переключить {CommandTargets.Accusative(command.Target)}",
         CommandIntent.AdjustInputVolume => $"изменить громкость {CommandTargets.Genitive(command.Target)}",
         CommandIntent.MuteAllAudio => "выключить весь звук",
-        CommandIntent.SetStreamTitle => "изменить название",
         CommandIntent.SetStreamCategory => "изменить категорию",
         CommandIntent.NextMusicTrack => "следующий трек",
         _ => command.Intent.ToString()

@@ -19,8 +19,6 @@ public interface ITwitchApiClient
 
     Task<TwitchStreamStatus> GetStreamStatusAsync(CancellationToken cancellationToken = default);
 
-    Task UpdateTitleAsync(string title, CancellationToken cancellationToken = default);
-
     Task UpdateCategoryAsync(string gameId, CancellationToken cancellationToken = default);
 }
 
@@ -157,16 +155,6 @@ public sealed class TwitchApiClient : ITwitchApiClient
         return new TwitchStreamStatus(
             string.Equals(ReadString(stream, "type"), "live", StringComparison.OrdinalIgnoreCase),
             viewers);
-    }
-
-    public async Task UpdateTitleAsync(
-        string title,
-        CancellationToken cancellationToken = default)
-    {
-        var auth = await EnsureAuthorizedAsync(cancellationToken).ConfigureAwait(false);
-        var url = $"{HelixBase}/channels?broadcaster_id={Uri.EscapeDataString(auth.UserId)}";
-        await SendAuthorizedAsync(auth, HttpMethod.Patch, url, new { title }, cancellationToken)
-            .ConfigureAwait(false);
     }
 
     public async Task UpdateCategoryAsync(

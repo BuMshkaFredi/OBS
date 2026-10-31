@@ -15,20 +15,17 @@ Secrets are never written to the log.
 
 ## Commands
 
-- `измени название стрима на ...` (change the stream title to ...) — a title of up to 140
-  characters. Before confirmation, the current title is read through
-  `GET /helix/channels?broadcaster_id=...`. Words starting with `!` (for example, `!tg`,
-  `!exitlag`) are appended to the end of the new title in the order they appear in the old one,
-  without duplicates; case is ignored when comparing. The confirmation shows the final title in
-  full. A Windows notification requires pressing “Подтвердить” (Confirm); only after that is
-  `PATCH /helix/channels` sent. If the final title is longer than 140 characters, the command is
-  rejected before any external call. Only trailing punctuation is removed from the spoken title;
-  the rest of the text and its case are kept.
-- `измени категорию стрима на ...` (change the stream category to ...) — before confirmation, a
-  search is performed through `GET /helix/search/categories`. The first result is used; the exact
-  found name is shown in the notification, and its `game_id` is sent only after confirmation.
+- `измени категорию стрима на ...` / `поменяй категорию игры на ...` (change the stream category
+  to ...) — before confirmation, a search is performed through `GET /helix/search/categories`. The
+  spoken name may be Russian, so the original query, a deterministic transliteration, and the
+  transliteration with numerals written as digits are tried in that order. The first result is used;
+  the exact found name is shown in the notification, and its `game_id` is sent only after
+  confirmation. After `PATCH /helix/channels` the channel is re-read: if `game_id` did not change, the
+  command reports failure with the category that is actually set instead of claiming success.
 
-Both commands are available through the shared voice pipeline, including Push-to-talk and the wake
+The stream title is edited manually: the application has no voice command for it.
+
+The command is available through the shared voice pipeline, including push-to-talk and the wake
 word “Бочи” (Bochi). A rejection, closing the notification, or no confirmation performs no external
 action.
 
@@ -53,13 +50,14 @@ retry are performed. Twitch issues a rotating refresh token to a public client, 
 the new pair is saved through DPAPI immediately. If the refresh token is revoked or expired, the
 tokens are deleted and the notification suggests connecting Twitch again.
 
-Helix requests use `Client-Id` and `Authorization: Bearer`. Title and category calls use the
+Helix requests use `Client-Id` and `Authorization: Bearer`. Category calls use the
 broadcaster ID of the currently authorized user. On a temporary network error, 429, or 5xx, the
 Helix request is retried once; there is no infinite retry loop.
 
 ## Checks
 
 OAuth and Helix are tested through a replaceable `HttpMessageHandler`; unit tests need neither real
-credentials nor network access. Title composition, viewer count parsing, polling pause/resume, and
+credentials nor network access. Category query variants, the post-update check, viewer count parsing,
+polling pause/resume, and
 the overlay view model are covered by unit tests. Manual verification of authorization, metadata
 changes, and the overlay requires a configured Twitch Client ID and an interactive Windows session.

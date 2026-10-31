@@ -21,6 +21,17 @@ public sealed class WindowsMediaPlaybackControl : IMediaPlaybackControl
             },
             cancellationToken);
 
+    public Task<MediaPlaybackResult> ResumeAsync(CancellationToken cancellationToken = default) =>
+        RunAsync(
+            async session =>
+            {
+                var resumed = await session.TryPlayAsync();
+                return resumed
+                    ? MediaPlaybackResult.Success()
+                    : MediaPlaybackResult.Failed("Windows не приняла команду воспроизведения.");
+            },
+            cancellationToken);
+
     public Task<MediaPlaybackResult> NextTrackAsync(CancellationToken cancellationToken = default) =>
         RunAsync(
             async session =>
