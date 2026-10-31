@@ -66,6 +66,19 @@ public sealed class CommandCorrectionTests
     }
 
     [Theory]
+    [InlineData("больше выключи музыку")]
+    [InlineData("больше выключи запись")]
+    [InlineData("больше выключи микрофон")]
+    [InlineData("меньше выключи музыку")]
+    public void Parse_ExtraDirectionWordBeforeCommand_DoesNotDropTheObject(string text)
+    {
+        // Лог клиента 29.10.2026: «больше выключи запись» превращалось
+        // в «браузер выключи» (MuteInput), потому что при отбрасывании
+        // последнего слова терялся объект команды. Такое угадывание запрещено.
+        Assert.Null(parser.Parse(text));
+    }
+
+    [Theory]
     [InlineData("нашли запись", CommandIntent.StartRecording, null)]
     [InlineData("основе запись", CommandIntent.StopRecording, null)]
     [InlineData("основании запись", CommandIntent.StopRecording, null)]

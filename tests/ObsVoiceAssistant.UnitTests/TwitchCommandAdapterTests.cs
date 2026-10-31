@@ -43,6 +43,26 @@ public sealed class TwitchCommandAdapterTests
     }
 
     [Fact]
+    public async Task PrepareCategory_RussianGameName_SearchesAliasDirectly()
+    {
+        // «Пас оф экзайл» транслитерация не находит: категория берётся из таблицы
+        // известных игр, и русский запрос на Twitch не отправляется.
+        var api = new FakeTwitchApi
+        {
+            Category = new TwitchCategory("poe-1", "Path of Exile", null),
+            OnlyQueryFound = "Path of Exile"
+        };
+        var adapter = new TwitchCommandAdapter(api);
+        var command = new ParsedCommand(CommandIntent.SetStreamCategory, "пас оф экзайл");
+
+        var prepared = await adapter.PrepareAsync(command);
+
+        Assert.Equal("Path of Exile", prepared.Argument);
+        Assert.Equal("poe-1", prepared.ArgumentId);
+        Assert.Equal(new[] { "Path of Exile" }, api.Queries);
+    }
+
+    [Fact]
     public async Task PrepareCategory_ThrowsWhenNothingFound()
     {
         var adapter = new TwitchCommandAdapter(new FakeTwitchApi());

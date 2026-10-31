@@ -404,8 +404,11 @@ public sealed class CommandParser
 
         // Иногда лишнее слово стоит в конце: «начни запись видео». Направление
         // и интенсивность в хвосте меняют смысл, поэтому такие слова не отбрасываем.
+        // Каноническое слово команды тоже не отбрасываем: иначе «больше выключи
+        // музыку» теряло объект и превращалось в «браузер выключи» (реальный лог).
         if (tokens.Length > 1 &&
             tokens[^1].Length >= 4 &&
+            !CommandVocabulary.Tokens.Contains(tokens[^1]) &&
             !CommandVocabulary.Negations.Contains(tokens[^1]) &&
             !MeaningChangingModifiers.Contains(tokens[^1]))
         {

@@ -15,13 +15,26 @@ Secrets are never written to the log.
 
 ## Commands
 
-- `измени категорию стрима на ...` / `поменяй категорию игры на ...` (change the stream category
-  to ...) — before confirmation, a search is performed through `GET /helix/search/categories`. The
-  spoken name may be Russian, so the original query, a deterministic transliteration, and the
-  transliteration with numerals written as digits are tried in that order. The first result is used;
-  the exact found name is shown in the notification, and its `game_id` is sent only after
-  confirmation. After `PATCH /helix/channels` the channel is re-read: if `game_id` did not change, the
-  command reports failure with the category that is actually set instead of claiming success.
+- `измени категорию стрима на ...`, `поменяй категорию игры на ...`, `поставь категорию на ...`
+  (change the stream category to ...) — before confirmation, a search is performed through
+  `GET /helix/search/categories`. The spoken name may be Russian:
+  1. for known games, the deterministic alias table `TwitchCategoryQuery` / `TwitchCategoryAliases`
+     gives the Latin search name directly: `пас оф экзайл`, `пое`, `пасов экзамен` (how Vosk hears
+     it), `путь изгнанника` (the official Russian name) → `Path of Exile`, `пое 2` → `Path of Exile 2`,
+     `доту`, `дота дс` → `Dota 2`, `майнкрафт` → `Minecraft`, `айзек` →
+     `The Binding of Isaac`, `раст` → `Rust`, `торчлайт инфинити` → `Torchlight: Infinite`,
+     `джаст чатинг` → `Just Chatting`;
+  2. otherwise the original query, a deterministic transliteration, and the transliteration with
+     numerals written as digits are tried in that order.
+  The alias accepts recognition typos with the same limits as the command dictionary — one edit for
+  5–7 letters, two for 8 or more — but never guesses a different number and never corrects words of
+  4 letters or shorter. On an ambiguous alias match the command falls back to transliteration instead
+  of guessing. The transliteration skips `ь` and `ъ` instead of indexing into an empty mapping:
+  previously «путь изгнанника» raised `IndexOutOfRangeException` before any Twitch request (customer
+  log, 31.10.2026). The first result is used; the exact found name is shown in the notification, and
+  its `game_id` is sent only after confirmation. After `PATCH /helix/channels` the channel is re-read:
+  if `game_id` did not change, the command reports failure with the category that is actually set
+  instead of claiming success.
 
 The stream title is edited manually: the application has no voice command for it.
 

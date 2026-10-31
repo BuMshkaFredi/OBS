@@ -89,6 +89,99 @@ public sealed class WakeWordSessionTests
     }
 
     [Fact]
+    public void VoskMochiVariant_WithCommand_Activates()
+    {
+        // В одной фразе Vosk слышит «Бочи» как «мочи» (подтверждено логами).
+        // С командой вариант принимается, иначе жалоба на распознавание не исправляется.
+        var session = new WakeWordSession(clock: () => Start);
+
+        var decision = session.Handle("мочи сохрани повтор");
+        var parsed = new CommandParser().Parse(decision.CommandText);
+
+        Assert.Equal(WakeWordDecisionKind.Command, decision.Kind);
+        Assert.Equal("сохрани повтор", decision.CommandText);
+        Assert.NotNull(parsed);
+        Assert.Equal(CommandIntent.SaveReplay, parsed.Intent);
+    }
+
+    [Fact]
+    public void VoskMochiVariant_Alone_DoesNotOpenWindow()
+    {
+        // «Мочи» — обычный глагол. Без команды он не должен включать прослушивание:
+        // иначе фоновая речь в игре открывала бы окно на шесть секунд.
+        var session = new WakeWordSession(clock: () => Start);
+
+        var wake = session.Handle("мочи");
+        var next = session.Handle("выключи музыку");
+
+        Assert.Equal(WakeWordDecisionKind.Ignored, wake.Kind);
+        Assert.Equal(WakeWordDecisionKind.Ignored, next.Kind);
+    }
+
+    [Fact]
+    public void VoskMochiVariant_WithFillerOnly_DoesNotOpenWindow()
+    {
+        var session = new WakeWordSession(clock: () => Start);
+
+        var wake = session.Handle("мочи пожалуйста");
+        var next = session.Handle("начни запись");
+
+        Assert.Equal(WakeWordDecisionKind.Ignored, wake.Kind);
+        Assert.Equal(WakeWordDecisionKind.Ignored, next.Kind);
+    }
+
+    [Theory]
+    [InlineData("больше выключи музыку", "выключи музыку", CommandIntent.ToggleInput)]
+    [InlineData("большие включи запись", "включи запись", CommandIntent.StartRecording)]
+    [InlineData("большая включи браузер", "включи браузер", CommandIntent.UnmuteInput)]
+    [InlineData("большим выключи браузер", "выключи браузер", CommandIntent.MuteInput)]
+    public void ClientLogVoskVariants_WithCommand_Activate(
+        string phrase,
+        string expectedCommand,
+        CommandIntent expectedIntent)
+    {
+        // Лог клиента 29–31.10.2026: в одной фразе Vosk слышит «Бочи»
+        // как «больше/большие/большая/большим».
+        var session = new WakeWordSession(clock: () => Start);
+
+        var decision = session.Handle(phrase);
+        var parsed = new CommandParser().Parse(decision.CommandText);
+
+        Assert.Equal(WakeWordDecisionKind.Command, decision.Kind);
+        Assert.Equal(expectedCommand, decision.CommandText);
+        Assert.NotNull(parsed);
+        Assert.Equal(expectedIntent, parsed.Intent);
+    }
+
+    [Theory]
+    [InlineData("больше")]
+    [InlineData("большие")]
+    [InlineData("большая")]
+    [InlineData("большим")]
+    public void ClientLogVoskVariants_Alone_DoNotOpenWindow(string variant)
+    {
+        // «Больше» — обычное слово: без команды оно не должно включать прослушивание.
+        var session = new WakeWordSession(clock: () => Start);
+
+        var wake = session.Handle(variant);
+        var next = session.Handle("выключи музыку");
+
+        Assert.Equal(WakeWordDecisionKind.Ignored, wake.Kind);
+        Assert.Equal(WakeWordDecisionKind.Ignored, next.Kind);
+    }
+
+    [Fact]
+    public void ClientLogBachivVariant_Activates()
+    {
+        var session = new WakeWordSession(clock: () => Start);
+
+        var decision = session.Handle("бачив выключи запись");
+
+        Assert.Equal(WakeWordDecisionKind.Command, decision.Kind);
+        Assert.Equal("выключи запись", decision.CommandText);
+    }
+
+    [Fact]
     public void OneSymbolError_BoteWithReplayCommand_Activates()
     {
         // «Боте» — одна ошибка от «боче», команда при этом должна дойти целиком.

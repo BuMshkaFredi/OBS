@@ -20,40 +20,41 @@ recognition is disabled and the application stays in the tray with the status
 
 ## Vosk model
 
-Model directories in `models/` are not included in the repository (`models/*` in `.gitignore`).
-The application tries them in priority order: the larger the model, the higher the accuracy and the
-lower the speed.
+There is exactly one supported model — `vosk-model-small-ru-0.22` (45 MB). Model directories in
+`models/` are not included in the repository (`models/*` in `.gitignore`). The application looks for
+`models\vosk-model-small-ru-0.22` next to the application, upward through the directory tree, and in
+the current directory; the selected directory and the load time are written to the log with the line
+`Модель распознавания: ... (Vosk), загрузка заняла ... мс`.
 
-| Priority | Directory | Size | WER: books / YouTube / devices |
-| --- | --- | --- | --- |
-| 1 | `vosk-model-ru-0.42` | 1.8 GB | 4.5 / 19.5 / 17.9 |
-| 2 | `vosk-model-ru-0.22` | 1.5 GB | 5.7 / 20.7 / 19.7 |
-| 3 | `vosk-model-small-ru-0.22` | 45 MB | 22.7 / 32.0 / 29.9 |
+WER of this model: 22.7 (books) / 32.0 (YouTube) / 29.9 (devices). The limited dictionary and the
+corrections described below compensate for the recognition errors.
 
-The search follows the priority list and, within it, looks next to the application, upward through the
-directory tree, and in the current directory. Therefore a model in the repository root takes priority
-over a copy in `bin`. The actually selected directory and the load time are written to the log with
-the line `Модель распознавания: ... (Vosk), загрузка заняла ... мс`.
+Larger Russian Vosk models are deliberately not supported. Their directories are ignored: the
+application looks only for `vosk-model-small-ru-0.22`. Measured with `Vosk 0.3.38` on the target
+machine (Ryzen 5 5600H, 15.4 GB RAM), `vosk-model-ru-0.42` loaded in 162.7 s, peaked at 8.4 GB of
+memory (5.4 GB after loading, because of the built-in `rescore` and `rnnlm`), and decoded at the same
+speed as the small model (RTF ≈ 0.19). Loading is lazy — it happens on the first recognition — so in
+the application such a model looks like a frozen command: no text, no error, no notification, and no
+diagnostic line. A model directory that exists but cannot be loaded produces no diagnostic line
+either.
 
-If the model directory is missing, the application writes an error to the log listing the expected
-directories, disables recognition, and shows the status `нет модели распознавания`.
+If the model directory is missing, the application writes an error to the log with the expected
+directory, disables recognition, and shows the status `нет модели распознавания`.
 
 Installing the model:
 
 ```powershell
-# Resume in a loop: the connection to alphacephei.com drops on large files.
-$url = 'https://alphacephei.com/vosk/models/vosk-model-ru-0.42.zip'
-$out = '.\models\vosk-model-ru-0.42.zip'
-for ($i = 1; $i -le 500; $i++) {
-  curl.exe -C - -L --retry 5 -o $out $url
-  if ((Get-Item $out).Length -ge 1937602113) { break }
-}
+# The connection to alphacephei.com may drop; curl -C - resumes the download.
+$url = 'https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip'
+$out = '.\models\vosk-model-small-ru-0.22.zip'
+curl.exe -C - -L --retry 5 -o $out $url
 Expand-Archive -Path $out -DestinationPath '.\models' -Force
 ```
 
 Compatibility: the NuGet package `Vosk` ends at version `0.3.38`, so only Kaldi-format models from
-this list are suitable. Zipformer2 models from HuggingFace (`alphacep/vosk-model-small-ru`,
-`alphacep/vosk-model-small-streaming-ru`) require Vosk 0.54+ and will not load.
+the Alpha Cephei list are suitable. Zipformer2 models from HuggingFace
+(`alphacep/vosk-model-small-ru`, `alphacep/vosk-model-small-streaming-ru`) require Vosk 0.54+ and
+will not load.
 
 The native libraries `libvosk.dll` and its dependencies are supplied by the `Vosk` package version
 `0.3.38`.
@@ -79,7 +80,9 @@ The native libraries `libvosk.dll` and its dependencies are supplied by the `Vos
   - one leading or trailing extra word of 4+ letters may be dropped if the rest of the phrase is
     recognized unambiguously: «блин включи микрофон», «начни запись видео». Direction and intensity
     words (`потише`, `громче`, `тише`, `совсем`, `меньше`, `больше`) are not dropped, so
-    «включи музыку потише» stays unrecognized;
+    «включи музыку потише» stays unrecognized. A trailing word that is itself a canonical command
+    word is not dropped either: otherwise «больше выключи музыку» lost the object and became
+    «браузер выключи» (customer log, 29.10.2026);
   - merging or splitting adjacent words is allowed only when the rest of the phrase matches exactly:
     «с три» → «стрим», «навстречу» → «на стриме»;
   - the phrase must contain at least one canonical word, and a negation rejects the whole phrase;
@@ -306,12 +309,22 @@ subscribers; that is a separate refactoring, not a setting.
   discarded. Therefore the same speech is not executed twice.
 - Vosk hears “Бочи” differently. The exact variants are listed in `Speech/WakeWordSession.cs`
   (`SpokenForms`): `бочи`, `боче`, `бочий`, `бочии`, `бочь`, `боч`, `бочка`, `бочки`, `бочке`,
-  `бочек`, `боже`. Besides an exact match, **one** recognition error (substitution, insertion, or
-  deletion of a character) is allowed, but the first letter must remain `б`: therefore `бачи`,
-  `боци`, `бочу`, `бочку` are recognized, while `ночи` is not. Two errors are not allowed. New exact
-  variants are added from the `Без ключевого слова, пропущено: «...»` lines in the log. “Боже” is an
-  ordinary interjection, so it is accepted only at the start of a phrase; if false triggers are
-  frequent, it can be removed.
+  `бочек`, `поте`, `боте`, `поти`, `боти`, `боже`, `бачив`. Besides an exact match, **one**
+  recognition error (substitution, insertion, or deletion of a character) is allowed, but the first
+  letter must remain `б`: therefore `бачи`, `боци`, `бочу`, `бочку` are recognized, while `ночи` is
+  not. Two errors are not allowed. New exact variants are added from the `Без ключевого слова,
+  пропущено: «...»` lines in the log. “Боже” is an ordinary interjection, so it is accepted only at
+  the start of a phrase; if false triggers are frequent, it can be removed.
+- In one phrase Vosk often hears “Бочи” as an ordinary word, and the model picks it because the first
+  consonant is quieter at the start of a phrase. The forms are listed separately in
+  `CommandOnlyForms` and are accepted **only together with a command**:
+  - `мочи` — developer log, 21.10.2026: `мочи включи микрофон`, `мочи сохрани повтор`;
+  - `больше`, `большие`, `большая`, `большим` — customer log, 29–31.10.2026: `больше выключи
+    музыку`, `большие включи запись`, `больше выключи запись`, `большая включи браузер` — 14 skipped
+    attempts, the main reason the customer said the one-phrase mode “ignores the command”.
+  Alone or with a filler these words do not open the waiting window and show no `Слушаю`, because
+  they are ordinary words. When the command is said as a second phrase after `Слушаю`, the wake word
+  is recognized as `бочи`/`бочки`; both modes keep working.
 - Recognition runs for every phrase, so loud background speech consumes CPU. This is the price of
   activation without a separate keyword-spotting engine; if necessary, the next step can be to limit
   listening by volume or by a Vosk grammar.

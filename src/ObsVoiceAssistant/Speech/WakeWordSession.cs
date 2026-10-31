@@ -59,7 +59,27 @@ public sealed class WakeWordSession
         "боте",
         "поти",
         "боти",
-        "боже"
+        "боже",
+        // Лог клиента 29.10.2026: «бачив выключи запись», «бачив включи музыку».
+        "бачив"
+    };
+
+    /// <summary>
+    /// Формы, которые Vosk выдаёт на «Бочи» только внутри фразы с командой.
+    /// «Мочи» подтверждено логами: «мочи включи микрофон», «мочи сохрани повтор»
+    /// (лог 21.10.2026, 18:33–22:29). «Больше/большие/большая/большим» — лог
+    /// клиента 29–31.10.2026: в одной фразе Vosk слышит «Бочи» так («больше
+    /// выключи музыку», «большие включи запись»). Одиночное слово окно не
+    /// открывает: это обычные слова, и принимать их без команды значило бы
+    /// слушать фон.
+    /// </summary>
+    private static readonly IReadOnlySet<string> CommandOnlyForms = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "мочи",
+        "больше",
+        "большие",
+        "большая",
+        "большим"
     };
 
     /// <summary>
@@ -69,7 +89,7 @@ public sealed class WakeWordSession
     /// </summary>
     private static bool IsWakeWord(string token)
     {
-        if (SpokenForms.Contains(token))
+        if (SpokenForms.Contains(token) || CommandOnlyForms.Contains(token))
         {
             return true;
         }
@@ -209,10 +229,17 @@ public sealed class WakeWordSession
         if (start < tokens.Length && IsWakeWord(tokens[start]))
         {
             var remainder = string.Join(' ', tokens[(start + 1)..]);
+            var commandOnly = CommandOnlyForms.Contains(tokens[start]);
 
             // «Бочи, пожалуйста» — это всё ещё только обращение: команду ждём следующей фразой.
+            // «Мочи» без команды — обычный глагол, окно не открываем.
             if (CommandVocabulary.RemoveFillers(remainder).Length == 0)
             {
+                if (commandOnly)
+                {
+                    return WakeWordDecision.Ignored;
+                }
+
                 Arm();
                 return WakeWordDecision.Armed;
             }

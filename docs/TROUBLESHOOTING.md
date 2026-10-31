@@ -23,7 +23,8 @@ Get-Content "$env:LOCALAPPDATA\ObsVoiceAssistant\assistant.log" -Encoding UTF8 |
 | `Ошибка обработки аудиосегмента` with text about an unconfigured source | No OBS source name is set for toggling. See the section below. |
 | `Запись без речи: распознавание пропущено` | The energy gate triggered: no speech was found in the recording. Possible causes are a microphone that is too quiet or a wrongly selected recording device. |
 | `Vosk не распознал сегмент «Бочи»: ...` | Continuous listening found speech by energy, but Vosk returned empty text. The line shows the duration, peak RMS, and segment size. If the RMS is noticeably above the threshold of 200 and the duration is close to a normal phrase, missed speech is likely rather than noise. |
-| `ERROR ... Каталог модели Vosk не найден`, tray status `нет модели распознавания` | The recognition model is not installed. Download and unpack a model from the table in `docs/SPEECH_AND_NOTIFICATIONS.md` into the `models` directory and start the application again. |
+| `ERROR ... Каталог модели Vosk не найден`, tray status `нет модели распознавания` | The recognition model is not installed. Download and unpack `vosk-model-small-ru-0.22` (see `docs/SPEECH_AND_NOTIFICATIONS.md`) into the `models` directory and start the application again. |
+| `Движок распознавания: Vosk (...)` is present, but there is no `Модель распознавания: ... загрузка заняла ... мс` and commands do nothing | The selected model directory exists but the model did not load: the directory structure is wrong (for example a nested `models\vosk-model-small-ru-0.22\vosk-model-small-ru-0.22`) or the archive was unpacked incompletely. The application writes nothing to the log in this case. Unpack `vosk-model-small-ru-0.22` correctly and restart; directories of other models are ignored. |
 
 ## MP4 copy of a recording and a replay
 
@@ -50,8 +51,10 @@ is created by ffmpeg without re-encoding (`-c copy`), so quality and sound do no
 - A category search error appears before the confirmation notification: either Twitch returned no
   category or the connection is temporarily unavailable. Repeat the phrase with the category name.
 - The category notification shows the Twitch search result, not the original recognized name.
-  Check it before pressing `Подтвердить` (Confirm). Russian names are transliterated before the
-  second search attempt, so «дота два» finds `Dota 2`.
+  Check it before pressing `Подтвердить` (Confirm). Known Russian names are searched by their Latin
+  name directly (`пас оф экзайл`/`пое` → `Path of Exile`, `майнкрафт` → `Minecraft`,
+  `джаст чатинг` → `Just Chatting`); other names are transliterated before the second search attempt,
+  so «дота два» finds `Dota 2`.
 - After a successful update, the notification shows the new category. Helix errors are shown as a
   safe message; tokens are never included in diagnostics.
 - `Twitch не применил смену категории` — the update request returned success, but re-reading the

@@ -1,16 +1,22 @@
+using ObsVoiceAssistant.Commands;
+
 namespace ObsVoiceAssistant.Integrations.Twitch;
 
 /// <summary>
 /// Преобразует произнесённое название категории в варианты для поиска Twitch.
 /// Распознавание русское, а названия категорий на Twitch почти всегда латиницей
 /// («дота два» вместо «Dota 2»), поэтому поиск идёт по нескольким вариантам.
-/// Логика детерминированная, без сети и без словарей конкретных игр.
+/// Сначала проверяется таблица известных игр (<see cref="TwitchCategoryAliases"/>),
+/// затем — как сказали, транслитерация и цифры вместо числительных.
+/// Логика детерминированная и без сети.
 /// </summary>
 public static class TwitchCategoryQuery
 {
     /// <summary>
-    /// Варианты запроса по порядку: как сказали, транслитерация и та же
-    /// транслитерация с цифрами вместо числительных. Дубликаты убраны.
+    /// Варианты запроса по порядку. Для известной игры из таблицы — только её
+    /// латинские названия: русский запрос и транслитерация всё равно ничего не найдут
+    /// и могли бы дать случайный первый результат. Иначе — как сказали,
+    /// транслитерация и транслитерация с цифрами вместо числительных.
     /// </summary>
     public static IReadOnlyList<string> BuildVariants(string? query)
     {
@@ -18,6 +24,12 @@ public static class TwitchCategoryQuery
         if (string.IsNullOrWhiteSpace(trimmed))
         {
             return Array.Empty<string>();
+        }
+
+        var normalized = ReplaceNumberWords(CommandVocabulary.Normalize(trimmed));
+        if (TwitchCategoryAliases.TryResolve(normalized, out var aliasNames))
+        {
+            return aliasNames;
         }
 
         var variants = new List<string> { trimmed };
@@ -121,10 +133,15 @@ public static class TwitchCategoryQuery
 
             if (Map.TryGetValue(lower, out var latin))
             {
-                builder.Append(char.IsUpper(symbol) ? char.ToUpperInvariant(latin[0]) : latin[0]);
-                if (latin.Length > 1)
+                // «ь» и «ъ» отображаются в пустую строку: обращаться к latin[0]
+                // без проверки нельзя, иначе «путь изгнанника» роняет поиск.
+                if (latin.Length > 0)
                 {
-                    builder.Append(latin[1..]);
+                    builder.Append(char.IsUpper(symbol) ? char.ToUpperInvariant(latin[0]) : latin[0]);
+                    if (latin.Length > 1)
+                    {
+                        builder.Append(latin[1..]);
+                    }
                 }
 
                 continue;

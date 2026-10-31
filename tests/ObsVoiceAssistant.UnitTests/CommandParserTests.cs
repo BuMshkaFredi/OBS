@@ -65,6 +65,18 @@ public sealed class CommandParserTests
         Assert.Equal("Dota 2", result.Argument);
     }
 
+    [Fact]
+    public void Parse_Category_RussianGameNameKeepsSpokenArgument()
+    {
+        // Название игры не исправляется словарём команд: его разбирает
+        // TwitchCategoryAliases, иначе «пас оф экзайл» потерялся бы.
+        var result = parser.Parse("поставь категорию на пас оф экзайл");
+
+        Assert.NotNull(result);
+        Assert.Equal(CommandIntent.SetStreamCategory, result.Intent);
+        Assert.Equal("пас оф экзайл", result.Argument);
+    }
+
     [Theory]
     [InlineData("следующий трек")]
     [InlineData("переключи трек")]

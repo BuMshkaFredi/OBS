@@ -72,8 +72,10 @@ cloud recognition service.
 - OBS: OBS Studio 32.2.2, built-in OBS WebSocket 5.x.
 - Speech engine: Vosk 0.3.38 (CPU, offline). The decision was fixed after a benchmark: Whisper on the
   target machine took 28–48 s per segment.
-- The Vosk model is selected by priority: `vosk-model-ru-0.42` → `vosk-model-ru-0.22` →
-  `vosk-model-small-ru-0.22`.
+- The Vosk model is fixed: `vosk-model-small-ru-0.22` (Kaldi format, ~45 MB). Larger Russian models
+  are not supported and their directories are ignored: `vosk-model-ru-0.42` loaded in 162.7 s and
+  peaked at 8.4 GB of memory on the target machine, which looks like a frozen command because loading
+  happens on the first recognition.
 - Target recognition mode: CPU is mandatory; the RTX 5060 may be used as an optimization, but not as
   a requirement.
 - Platform: Twitch Helix API and OAuth with the minimum necessary scopes.
@@ -264,6 +266,8 @@ appears. Phrase fuzzy matching must not choose an OBS source: the source is take
 15. Say `Бочи` without a command: the compact panel `Слушаю` appears, then say `включи микрофон`
     within 6 seconds — the command is executed.
 16. Say `Бочи, начни запись` as one phrase: the command is executed without a separate waiting window.
+    Repeat in one phrase several times: Vosk may hear the wake word as `мочи`, and the command must
+    still be executed. The same word alone (`мочи`) must not show `Слушаю`.
 17. Say a command without the wake word, for example `включи микрофон`: nothing is executed, and the
     line `Без ключевого слова, пропущено` remains in the log.
 18. Hold Caps Lock and say `Бочи, начни запись`: the command is executed once, with no repeated
@@ -286,15 +290,19 @@ appears. Phrase fuzzy matching must not choose an OBS source: the source is take
     for saving a replay.
 24. Change the category with a Russian name, for example `поменяй категорию игры на дота два`: the
     confirmation shows the exact Twitch name `Dota 2`, and after confirmation the category is set.
-    Repeat with a name that does not exist: the command is rejected before confirmation.
+    Then check `поставь категорию на пас оф экзайл` (`Path of Exile`), `поставь категорию на пое два`
+    (`Path of Exile 2`), `поставь категорию на майнкрафт` (`Minecraft`),
+    `поставь категорию на джаст чатинг` (`Just Chatting`). Repeat with a name that does not exist:
+    the command is rejected before confirmation.
 25. Enable the viewer overlay and start the stream: the window shows the viewer count and updates.
     After the stream stops, the window hides; the window position persists after a restart.
 
 ## 7. Risks and Questions Before the Relevant Stages
 
-- The exact Vosk latency depends on the model size, recording length, and CPU load; on
-  `vosk-model-small-ru-0.22` the measured RTF is ≈ 0.20–0.23, but the larger models require a
-  separate measurement.
+- The exact Vosk latency depends on the recording length and CPU load; on
+  `vosk-model-small-ru-0.22` the measured RTF is ≈ 0.20–0.23. The large model
+  `vosk-model-ru-0.42` was measured as well: the same RTF on decoding, but 162.7 s and 8.4 GB to load,
+  so it is not used.
 - Push-to-talk key interception and Windows Toast actions require manual verification in a real Windows
   session.
 - Consider the .NET version, speech engine, and test framework chosen: .NET 10.0.12, Vosk 0.3.38,
@@ -570,3 +578,86 @@ The customer reported that category change does not work and asked to remove the
 Status 2026-10-31: implemented in `Commands/CommandVocabulary`, `TwitchCategoryQuery`,
 `TwitchCommandAdapter`, and `TwitchApiClient`; unit tests cover the variants and the post-update check.
 Manual test 24 checks the category with a Russian name.
+
+## 11. Category Names and One-Phrase Wake Word (accepted 2026-10-31)
+
+Source: the customer reported two problems with build 0.2.0 in the working session. No new email file
+was received; the report is recorded here and the fixes are implemented without changing the mail
+policy or the question registry.
+
+### 11.1. Russian game names in the category command
+
+Goal: `поставь категорию на пас оф экзайл` must set `Path of Exile`, and the same works for the games
+the customer listed.
+
+- A deterministic alias table `Integrations/Twitch/TwitchCategoryAliases` maps spoken Russian forms to
+  the Latin search names: `пас оф экзайл` / `пое` → `Path of Exile`, `пое 2` → `Path of Exile 2`,
+  `майнкрафт` → `Minecraft`, `айзек` → `The Binding of Isaac`, `раст` → `Rust`,
+  `торчлайт инфинити` → `Torchlight: Infinite`, `джаст чатинг` → `Just Chatting`.
+- The alias is checked before the transliteration chain. When an alias matches, only the alias search
+  names are sent to Twitch: the Russian query and its transliteration cannot produce a useful result
+  and could return a random first hit.
+- Recognition typos are accepted with the same limits as the command dictionary: one edit for 5–7
+  letters, two for 8 or more. Words of 4 letters or shorter are not corrected, numeric forms are not
+  approximated (`пое три` never becomes `Path of Exile 2`), and an ambiguous match falls back to
+  transliteration instead of guessing.
+- The short phrasing `поставь категорию на ...` (without `стрима`/`игры`) is now generated from the
+  same verb and noun lists, so the customer is not forced to say the full form.
+
+Status 2026-10-31: implemented; unit tests cover every alias, the typo limits, the number rule, and
+the adapter call. Manual test 24 checks the new names with a real Twitch account.
+
+### 11.2. Wake word in one phrase
+
+Goal: `Бочи, включи микрофон` said as one phrase works as reliably as `Бочи` → `Слушаю` → command.
+
+- The log `assistant.log` shows the cause: in one phrase Vosk hears `Бочи` as `мочи`
+  (`мочи включи микрофон`, `мочи сохрани повтор`, `мочи мод`), and the wake word was rejected because
+  the first letter is not `б`. Said as a separate phrase, the same word is recognized as
+  `бочи`/`бочки`, which is why the two-step mode worked.
+- `мочи` is added as a separate `CommandOnlyForms` entry in `Speech/WakeWordSession`: it triggers only
+  when followed by a command. `мочи` alone or with a filler does not arm the listening window and does
+  not show `Слушаю`, because it is an ordinary verb.
+- The one-edit rule for the remaining variants is unchanged: the first letter must stay `б`, and
+  `ночи` still does not trigger.
+
+Status 2026-10-31: implemented with unit tests for the command, the standalone word, and the
+filler-only form. Manual test 16 checks the one-phrase mode; real verification still needs the
+customer's microphone, and the log line `Без ключевого слова, пропущено` remains the way to confirm
+the result on the target machine.
+
+### 11.3. Customer log analysis
+
+Source: the customer's `assistant.log` (21.10–31.10.2026, build 0.1.0/0.2.0) supplied on 2026-10-31.
+The log answers the “one phrase is worse” complaint with concrete data:
+
+- 107 phrases were skipped without the wake word. The first word was `больше` (6), `большая` (4), or
+  `большие` (4) — 14 attempts in one phrase: `больше выключи музыку`, `большие включи запись`,
+  `больше останови запись`, `больше выключи запись`, `большая включи браузер`. The same word was
+  recognized correctly as `бочек`/`бочка`/`бочки` when said separately, which is exactly why the
+  two-step mode worked.
+- `бачив` appeared twice (`бачив выключи запись`, `бачив включи музыку`).
+- 30 segments produced no text at all (`Vosk не распознал сегмент «Бочи»`), mostly long and loud
+  segments of background speech; this is a separate acoustic limitation, not a variant-list gap.
+- The customer's own comment in the log: «когда ты ключевое слово говоришь и что-то добавляешь…
+  вообще тотальное насрать» and «может надо микро промежуток сделать».
+
+Fixes:
+
+- `больше`, `большие`, `большая`, `большим` are added to `CommandOnlyForms`: they trigger only with
+  a command and never open the waiting window alone.
+- `бачив` is added to the exact `SpokenForms`.
+- The parser no longer drops a trailing canonical command word during fuzzy matching. The log showed
+  `больше выключи запись` being converted to `браузер выключи` (`MuteInput`): the object word was
+  dropped and the browser was muted instead of stopping the recording. Such a phrase is now rejected
+  rather than guessed; with the wake word the form is handled correctly.
+- Category aliases use the customer's actual renderings: `пасов экзамен`, `пассов экзамен`,
+  `пасов экзамена`, `пас о экзамен`, `путь изгнанника`, `напои` → `Path of Exile`;
+  `дота дс`, `дота дпс` → `Dota 2`.
+- Fixed `IndexOutOfRangeException` in the transliteration of names containing `ь`/`ъ`
+  (`путь изгнанника`): the empty mapping was indexed as a string.
+
+Status 2026-10-31: implemented; unit tests cover every new wake form, the parser regression, the new
+aliases, and the soft-sign transliteration. The empty-segment problem and the “больше + command”
+false-positive risk remain for manual verification with the customer; manual tests 16 and 24 are the
+checkpoints.

@@ -51,14 +51,11 @@ shortcut to the executable in `%APPDATA%\Microsoft\Windows\Start Menu\Programs\S
 
 ## Speech model
 
-Commands are recognized by Vosk locally, on the CPU. Model directories are not committed to the
-repository. The application searches for models in this priority order:
-
-1. `vosk-model-ru-0.42` (1.8 GB, best accuracy)
-2. `vosk-model-ru-0.22` (1.5 GB)
-3. `vosk-model-small-ru-0.22` (45 MB, fastest)
-
-Download and unpack at least one model into `models` in the repository root:
+Commands are recognized by Vosk locally, on the CPU. The only supported model is
+`vosk-model-small-ru-0.22` (45 MB, Kaldi format). Model directories are not committed to the
+repository (`models/*` in `.gitignore`). The application looks for
+`models\vosk-model-small-ru-0.22` next to the executable, upward through the directory tree, and in
+the current directory. Download and unpack it into `models` in the repository root:
 
 ```powershell
 $url = 'https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip'
@@ -67,8 +64,10 @@ Invoke-WebRequest -Uri $url -OutFile $out
 Expand-Archive -Path $out -DestinationPath '.\models' -Force
 ```
 
-For the larger model, replace the file name with `vosk-model-ru-0.42.zip` and allow several
-gigabytes of disk space. If no model is found, recognition is disabled and the tray status shows
+The larger Russian models (`vosk-model-ru-0.22` and `vosk-model-ru-0.42`) are not supported, and
+their directories are ignored. On the target machine `vosk-model-ru-0.42` took 2 minutes 43 seconds
+to load and up to 8.4 GB of memory, while recognition speed stayed the same, so such a model looks
+like a frozen command. If no model is found, recognition is disabled and the tray status shows
 `нет модели распознавания`.
 
 ## OBS setup
@@ -109,7 +108,9 @@ Commands are Russian-only. There are two activation modes:
 - **Wake word:** say «Бочи» alone and then a command within 6 seconds, or say the wake word right
   before the command, for example «Бочи, включи микрофон». Background speech without the wake word
   is ignored. While the push-to-talk key is held, wake-word listening is suspended so the same
-  command is not executed twice.
+  command is not executed twice. In a single phrase the engine may hear the wake word as «больше» or
+  «большие»; the command still runs when one is said. Alone, those ordinary words do not open the
+  six-second window.
 
 Typical commands:
 
@@ -128,7 +129,7 @@ Typical commands:
 | Mute/unmute stream music | `выключи музыку стрима`, `включи звук стрима` | No |
 | Mute all sound | `ол мут`, `выключи весь звук` | No |
 | Change volume | `громкость микрофона плюс 10`, `громкость музыки минус 5` | No |
-| Change stream category | `измени категорию стрима на ...`, `поменяй категорию игры на ...` | Yes |
+| Change stream category | `измени категорию стрима на ...`, `поменяй категорию игры на ...`, `поставь категорию на ...` | Yes |
 
 Dangerous actions show a Windows notification with **Подтвердить** and **Отмена** buttons. The
 action is performed only after **Подтвердить**; **Отмена**, closing the notification, or no response
@@ -150,10 +151,15 @@ switch was not performed.
 
 The stream title is edited manually in the Twitch dashboard: the application does not change it by
 voice. The category is changed by voice. Before the confirmation, the spoken name is searched on
-Twitch — the first result is used, and the confirmation shows its exact name. Russian names are
-searched by transliteration and digits as well, so «дота два» finds `Dota 2`. After the confirmation
-the category is re-read; if Twitch did not apply the change, the notification says which category is
-actually set.
+Twitch — the first result is used, and the confirmation shows its exact name. Known Russian names are
+searched by their Latin name directly: `пас оф экзайл`, `пое`, or `путь изгнанника` finds
+`Path of Exile`, `пое два` finds
+`Path of Exile 2`, `доту` finds `Dota 2`, `майнкрафт` finds `Minecraft`, `айзек` finds
+`The Binding of Isaac`, `раст` finds `Rust`, `торчлайт инфинити` finds `Torchlight: Infinite`, and
+`джаст чатинг` finds `Just Chatting`.
+Other names are searched by transliteration and digits as well, so «дота два» finds `Dota 2`. After the
+confirmation the category is re-read; if Twitch did not apply the change, the notification says which
+category is actually set.
 
 The viewer count overlay is disabled by default. Enable it with the **Счётчик зрителей** item in the
 tray menu or with the checkbox in settings. The always-on-top window does not take focus, does not
