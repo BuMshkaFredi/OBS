@@ -17,10 +17,17 @@ Statuses: `draft` — draft, `approved` — allowed to send, `sent` — sent, `r
 | Letter | Build | Status | Sent | Subject |
 | --- | --- | --- | --- | --- |
 | REL-001 | 0.1.0 MVP | sent | 2026-10-27 | OBS Voice Assistant — сборка 0.1.0 для проверки |
+| REL-002 | 0.2.0 | sent | 2026-10-31 | OBS Voice Assistant — сборка 0.2.0 для проверки |
 
 Build feedback on `REL-001` arrived on 2026-10-31 and is saved in
 `answers/reply-20261031-060720-ec263136ec.md`. It contains no answers to the batch questions, only
 the three wishes listed below.
+
+`REL-002` describes that feedback being addressed: the configurable push-to-talk key, resuming Yandex
+Music from the pause, the fixed category command, and the removed title command. The build was
+published as `v0.2.0`; the letter was sent on 2026-10-31. The first SMTP attempts failed because
+Gmail's SMTP ports were unreachable from the working network; the send succeeded from another
+network, and the audit log contains four attempts, one of them `sent`.
 
 ## Unscheduled wishes
 
