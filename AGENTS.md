@@ -220,7 +220,7 @@ repo-root/
 - Keep generated artifacts and publish output in `bin/`, `obj/`, `publish/` outside git; models by a separate decision; do not commit large binary files by default.
 - Store application configuration through typed settings; user configuration templates in `docs` or `config.example.*`, without secrets.
 - Store integration contracts and manual protocols in `docs/integrations/` after that directory is created.
-- Documentation is kept in English. The Russian original of each translated document is stored next to the English version with the `.ru.md` suffix (`AGENTS.ru.md`, `docs/MVP_PLAN.ru.md`); keep both in sync when the content changes.
+- Documentation is kept in English only. Do not add or restore Russian duplicates with the `.ru.md` suffix next to the English files.
 
 ---
 

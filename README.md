@@ -222,5 +222,5 @@ notifications, Twitch, Yandex Music, and the overlay are listed in
   count.
 - [`AGENTS.md`](AGENTS.md) — architecture, rules, and development workflow.
 
-Russian originals of the documentation are stored next to the English files with the `.ru.md` suffix.
+All documentation is kept in English only; Russian duplicates with the `.ru.md` suffix are not used.
 The README is intentionally English-only.
