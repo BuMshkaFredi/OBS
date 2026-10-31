@@ -160,7 +160,7 @@ public partial class App : System.Windows.Application
         if (!Directory.Exists(voskModelDirectory))
         {
             logger.Error(
-                "Каталог модели Vosk не найден. Ожидается один из: " +
+                "Каталог модели Vosk не найден. Ожидается " +
                 $"{string.Join(", ", VoskSpeechRecognizer.ModelDirectoryNames)} " +
                 "в каталоге models рядом с приложением. Распознавание речи отключено.");
             return null;

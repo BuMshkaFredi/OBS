@@ -23,7 +23,7 @@
 | Desktop UI | WPF | Version follows the chosen .NET runtime | System tray and the future settings panel | Do not add another UI framework without a separate decision |
 | OBS integration | `obs-websocket-dotnet` | 5.7.0 | Typed OBS WebSocket 5.x client for controlling recording, streaming, Replay Buffer, and inputs | Supports `net10.0`; verify the actual connection with OBS Studio 32.2.2 |
 | Audio capture | `NAudio` | 3.2.0 | Microphone audio capture via Windows audio input | Use short recordings; the device and capture errors must be diagnosable |
-| Speech recognition | `Vosk` | 0.3.38 | Local Russian speech recognition engine | CPU, no GPU; the Russian model `vosk-model-small-ru-0.22` (~45 MB) or the large `vosk-model-ru-0.42` is downloaded separately into `models/` |
+| Speech recognition | `Vosk` | 0.3.38 | Local Russian speech recognition engine | CPU, no GPU; the only supported model is `vosk-model-small-ru-0.22` (~45 MB), downloaded separately into `models/`; larger Russian models load for minutes and take gigabytes of RAM, so they are not supported |
 | Notifications | Windows toast notifications | Pin the API/package at implementation time | Notifications and confirmation buttons | Do not perform confirmation actions without an explicit button press |
 | Streaming platform | Twitch Helix API | The API version current at implementation time | Changing the Twitch category; reading the live viewer count | Do not store OAuth tokens in plain text |
 | Media playback | Windows Media Control (WinRT) | Windows SDK projection from the `net10.0-windows10.0.22621.0` target | Pause and switch tracks in Yandex Music | No NuGet package; works only when the player publishes a Windows media session, and a missing session must not fail the OBS command |

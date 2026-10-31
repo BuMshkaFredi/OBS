@@ -13,18 +13,17 @@ namespace ObsVoiceAssistant.Speech;
 public sealed class VoskSpeechRecognizer : ISpeechRecognizer, IDisposable
 {
     /// <summary>
-    /// Каталоги русских моделей в порядке предпочтения. Если установлена более крупная модель,
-    /// используется она: точность выше, но и распознавание идёт медленнее.
+    /// Поддерживаемый каталог русской модели. Большие модели (`vosk-model-ru-0.22` и
+    /// `vosk-model-ru-0.42`) намеренно не поддерживаются: загрузка занимает минуты и гигабайты ОЗУ,
+    /// а распознавание идёт с той же скоростью.
     /// </summary>
     public static readonly IReadOnlyList<string> ModelDirectoryNames = new[]
     {
-        "vosk-model-ru-0.42",
-        "vosk-model-ru-0.22",
         "vosk-model-small-ru-0.22"
     };
 
     /// <summary>Имя каталога модели по умолчанию, если ничего не найдено.</summary>
-    public static string DefaultModelDirectoryName => ModelDirectoryNames[^1];
+    public static string DefaultModelDirectoryName => ModelDirectoryNames[0];
 
     private readonly string modelDirectory;
     private readonly Action<string>? recognizedText;
@@ -44,17 +43,16 @@ public sealed class VoskSpeechRecognizer : ISpeechRecognizer, IDisposable
     }
 
     /// <summary>
-    /// Каталог модели: приоритет задаётся списком имён, а поиск идёт рядом с приложением,
-    /// вверх по дереву каталогов и в текущем каталоге, чтобы находить модель и в bin,
-    /// и в корне репозитория при dotnet run.
+    /// Каталог модели: поиск идёт рядом с приложением, вверх по дереву каталогов и в текущем
+    /// каталоге, чтобы находить модель и в bin, и в корне репозитория при dotnet run.
     /// </summary>
     public static string ResolveDefaultModelDirectory() =>
         FindModelDirectory(EnumerateSearchRoots(AppContext.BaseDirectory), ModelDirectoryNames)
         ?? Path.Combine(AppContext.BaseDirectory, "models", DefaultModelDirectoryName);
 
     /// <summary>
-    /// Ищет первый существующий каталог модели. Сначала перебираются имена моделей по приоритету,
-    /// затем корневые каталоги, поэтому более крупная установленная модель побеждает копию в bin.
+    /// Ищет первый существующий каталог модели: перебираются имена моделей, затем корневые каталоги
+    /// в порядке поиска. Каталоги неподдерживаемых моделей игнорируются.
     /// </summary>
     public static string? FindModelDirectory(
         IEnumerable<string> rootDirectories,
