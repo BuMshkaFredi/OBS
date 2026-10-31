@@ -18,6 +18,7 @@ Statuses: `draft` — draft, `approved` — allowed to send, `sent` — sent, `r
 | --- | --- | --- | --- | --- |
 | REL-001 | 0.1.0 MVP | sent | 2026-10-27 | OBS Voice Assistant — сборка 0.1.0 для проверки |
 | REL-002 | 0.2.0 | sent | 2026-10-31 | OBS Voice Assistant — сборка 0.2.0 для проверки |
+| REL-003 | 0.2.1 | sent | 2026-10-31 | OBS Voice Assistant — сборка 0.2.1 для проверки |
 
 Build feedback on `REL-001` arrived on 2026-10-31 and is saved in
 `answers/reply-20261031-060720-ec263136ec.md`. It contains no answers to the batch questions, only
@@ -28,6 +29,13 @@ Music from the pause, the fixed category command, and the removed title command.
 published as `v0.2.0`; the letter was sent on 2026-10-31. The first SMTP attempts failed because
 Gmail's SMTP ports were unreachable from the working network; the send succeeded from another
 network, and the audit log contains four attempts, one of them `sent`.
+
+`REL-003` describes build 0.2.1, prepared from the customer's `assistant.log` supplied on 2026-10-31:
+the wake-word variants `больше`/`большие`/`большая`/`большим` and `бачив`, the Russian Twitch
+category aliases (`пас оф экзайл`, `пасов экзамен`, `путь изгнанника` → `Path of Exile`,
+`дота дс` → `Dota 2`), the soft-sign transliteration fix, and the fuzzy-match guard that previously
+muted the browser on «больше выключи музыку». The build was published as `v0.2.1`; the letter was
+sent on 2026-10-31.
 
 ## Unscheduled wishes
 
@@ -43,6 +51,7 @@ separate row and awaits the user's decision; nothing is implemented automaticall
 | 2026-10-31 | Rebind the push-to-talk key from Caps Lock to any other key or key combination (F9, F12, Ctrl/Shift combinations; the customer plans to use Ctrl+Shift+F9) | `answers/reply-20261031-060720-ec263136ec.md`, item 1 | accepted: a configurable key or combination, Caps Lock stays the default; the settings window captures the real key |
 | 2026-10-31 | After personal music is turned back on, the Yandex Music app is not resumed from pause (pausing works, resuming does not); the customer asks to fix it | `answers/reply-20261031-060720-ec263136ec.md`, item 2 | accepted: fixed through the same Windows media session, a missing player does not cancel the OBS action |
 | 2026-10-31 | The Twitch category change does not work in the current build; the customer asks to finish it and to remove the stream title change, because the title is better edited manually | `answers/reply-20261031-060720-ec263136ec.md`, item 3 | accepted: the category is fixed and verified after the update; the title command, its confirmation, and tag composition are removed |
+| 2026-10-31 | The customer's log shows that «Бочи» in one phrase is heard as «больше», «большие», «большая», or «большим»; the category command fails on Path of Exile names and sets «Dota DS» for «дота дс» | customer log supplied on 2026-10-31 | accepted: the wake-word variants, category aliases, soft-sign fix, and parser guard are implemented in build 0.2.1 |
 
 User decision on 2026-10-31: all three wishes are accepted and implemented in slice 8 of
 [`docs/MVP_PLAN.md`](../MVP_PLAN.md), section 10. The email contains no answers to batch questions;
